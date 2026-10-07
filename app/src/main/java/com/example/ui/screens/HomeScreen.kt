@@ -370,7 +370,7 @@ fun HomeHeader(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "ARENA",
+                        text = "WORLD",
                         color = TextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
