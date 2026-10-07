@@ -1,0 +1,6 @@
+{
+  "name": "ArenaWar Esports",
+  "description": "Esports tournament platform for Free Fire, BGMI and mobile gaming contests with wallet, matches, and player profile.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

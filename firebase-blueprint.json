@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Esports tournament details for Free Fire, BGMI, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "gameCategoryName": { "type": "string", "enum": ["ALL", "FREE_FIRE", "BGMI", "VALORANT", "COD_MOBILE"] },
+        "map": { "type": "string" },
+        "formatName": { "type": "string", "enum": ["SOLO", "DUO", "SQUAD"] },
+        "scheduleTime": { "type": "string" },
+        "scheduleDate": { "type": "string" },
+        "entryFee": { "type": "integer" },
+        "prizePool": { "type": "integer" },
+        "perKill": { "type": "integer" },
+        "totalSlots": { "type": "integer" },
+        "filledSlots": { "type": "integer" },
+        "bannerType": { "type": "string" },
+        "serverType": { "type": "string" },
+        "organizer": { "type": "string" },
+        "statusText": { "type": "string" },
+        "winnerName": { "type": "string" },
+        "declaredWinnerAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "gameCategoryName", "entryFee", "prizePool", "totalSlots", "filledSlots"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account with role, wallet balance, and profile data.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "player"] },
+        "walletBalance": { "type": "integer" },
+        "matchesPlayed": { "type": "integer" },
+        "totalWins": { "type": "integer" },
+        "totalKills": { "type": "integer" },
+        "tier": { "type": "string" },
+        "level": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "walletBalance"]
+    },
+    "AdminConfig": {
+      "title": "AdminConfig",
+      "description": "Authorized admin users in Firestore.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "UserRegistration": {
+      "title": "UserRegistration",
+      "description": "Tournament registration record for a specific user.",
+      "type": "object",
+      "properties": {
+        "registrationId": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "tournamentTitle": { "type": "string" },
+        "userId": { "type": "string" },
+        "entryFee": { "type": "integer" },
+        "roomId": { "type": "string" },
+        "roomPassword": { "type": "string" },
+        "slotNumber": { "type": "integer" }
+      },
+      "required": ["registrationId", "tournamentId", "userId", "entryFee"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Record of deposits, entry fees, or winnings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "integer" },
+        "isCredit": { "type": "boolean" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "amount", "isCredit"]
+    }
+  },
+  "firestore": {
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Public tournament directory with admin creation and winner declaration."
+    },
+    "/admins/{adminUid}": {
+      "schema": "AdminConfig",
+      "description": "Admin identity document for role verification."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile with role and wallet balance."
+    },
+    "/users/{userId}/registrations/{registrationId}": {
+      "schema": "UserRegistration",
+      "description": "Tournaments joined by the user."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "WalletTransaction",
+      "description": "Wallet transactions."
+    }
+  }
+}

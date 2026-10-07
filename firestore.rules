@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Admin role check: checks /admins collection or admin email
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && request.auth.token.email == 'aslamhussain096@gmail.com')
+      );
+    }
+
+    // Admins collection:
+    match /admins/{adminId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 1. Tournaments collection:
+    function isValidTournament(data) {
+      return data.title is string && data.title.size() <= 100 &&
+             data.entryFee is int && data.entryFee >= 0 &&
+             data.prizePool is int && data.prizePool >= 0 &&
+             data.totalSlots is int && data.totalSlots > 0 &&
+             data.filledSlots is int && data.filledSlots >= 0 &&
+             data.filledSlots <= data.totalSlots &&
+             (!('winnerName' in data) || (data.winnerName is string && data.winnerName.size() <= 100));
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(tournamentId) && isValidTournament(incoming());
+
+      allow update: if isSignedIn() && isValidTournament(incoming()) && (
+        // Player Joining (only filledSlots & statusText)
+        (!('winnerName' in incoming()) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['filledSlots', 'statusText']) &&
+         incoming().filledSlots >= existing().filledSlots) ||
+        // Only Admin can declare winner or update tournament details
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['winnerName', 'statusText', 'title', 'map', 'scheduleTime', 'scheduleDate', 'entryFee', 'prizePool', 'perKill', 'totalSlots', 'filledSlots', 'bannerType', 'serverType', 'organizer', 'declaredWinnerAt']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // 2. User Profile:
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.walletBalance is int && data.walletBalance >= 0 &&
+             (!('matchesPlayed' in data) || (data.matchesPlayed is int && data.matchesPlayed >= 0)) &&
+             (!('role' in data) || (data.role is string && (data.role == 'admin' || data.role == 'player'))) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 60)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) && isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId;
+
+      allow delete: if isAdmin();
+
+      // 3. User Joined Registrations Subcollection:
+      function isValidRegistration(data) {
+        return data.userId is string && data.userId == request.auth.uid &&
+               data.tournamentId is string && data.tournamentId.size() <= 128 &&
+               data.entryFee is int && data.entryFee >= 0;
+      }
+
+      match /registrations/{registrationId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidId(registrationId) && isValidRegistration(incoming());
+        allow update, delete: if isAdmin();
+      }
+
+      // 4. User Transactions Subcollection:
+      function isValidTransaction(data) {
+        return data.userId is string && data.userId == request.auth.uid &&
+               data.amount is int && data.amount > 0 &&
+               data.title is string && data.title.size() <= 150 &&
+               data.isCredit is bool;
+      }
+
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidId(transactionId) && isValidTransaction(incoming());
+        allow update, delete: if isAdmin();
+      }
+    }
+  }
+}
