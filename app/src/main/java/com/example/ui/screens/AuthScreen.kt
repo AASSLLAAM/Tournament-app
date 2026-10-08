@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -35,15 +34,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,11 +61,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
 import com.example.ui.theme.BorderCyan
 import com.example.ui.theme.BorderMuted
@@ -80,11 +72,7 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
-import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -96,7 +84,6 @@ fun AuthScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
 
     var isSignUpMode by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
@@ -379,7 +366,7 @@ fun AuthScreen(
                                 isLoading = false
                                 val msg = e.localizedMessage ?: "Authentication failed"
                                 errorMessage = if (msg.contains("operation is not allowed", ignoreCase = true) || msg.contains("sign-in provider is disabled", ignoreCase = true)) {
-                                    "Email/Password sign-in is disabled in Firebase console. Please use 'Continue with Google' below."
+                                    "Email/Password sign-in is disabled in Firebase console."
                                 } else {
                                     msg
                                 }
@@ -421,132 +408,16 @@ fun AuthScreen(
                         textAlign = TextAlign.Center
                     )
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = BorderMuted)
-                    Text(
-                        text = "  RECOMMENDED  ",
-                        color = GoldAccent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = BorderMuted)
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Sign in with Google Button (Recommended, 1-tap Google Sign-In)
-                Button(
-                    onClick = {
-                        isLoading = true
-                        errorMessage = null
-                        onGoogleSignInClicked(
-                            context = context,
-                            credentialManager = credentialManager,
-                            onAuthSuccess = {
-                                isLoading = false
-                                onAuthSuccess()
-                            },
-                            onAuthError = { err ->
-                                isLoading = false
-                                errorMessage = err
-                            },
-                            scope = coroutineScope,
-                            onAuthCancelled = {
-                                isLoading = false
-                            }
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("google_sign_in_button"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = GoldAccent,
-                        contentColor = Color.Black
-                    ),
-                    enabled = !isLoading
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Continue with Google",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
             }
-        }
-    }
-}
-
-fun onGoogleSignInClicked(
-    context: Context,
-    credentialManager: CredentialManager,
-    onAuthSuccess: () -> Unit,
-    onAuthError: (String) -> Unit,
-    scope: CoroutineScope,
-    onAuthCancelled: () -> Unit = {}
-) {
-    val clientId = try {
-        context.getString(R.string.default_web_client_id)
-    } catch (e: Exception) {
-        onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
-        return
-    }
-
-    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-    val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
-
-    scope.launch {
-        try {
-            val result = credentialManager.getCredential(context as Activity, request)
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
-                onAuthSuccess()
-            } else {
-                onAuthError("Unexpected credential type received")
-            }
-        } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
-            onAuthCancelled()
-        } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Sign in failed")
         }
     }
 }
 
 fun signOutUser(
     context: Context,
-    credentialManager: CredentialManager,
     onSignOutComplete: () -> Unit,
     scope: CoroutineScope
 ) {
     Firebase.auth.signOut()
-    scope.launch {
-        try {
-            credentialManager.clearCredentialState(ClearCredentialStateRequest())
-        } catch (e: Exception) {
-            Log.e("Auth", "Failed to clear credential state", e)
-        } finally {
-            onSignOutComplete()
-        }
-    }
+    onSignOutComplete()
 }
