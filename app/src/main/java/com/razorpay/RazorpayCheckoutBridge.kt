@@ -28,7 +28,7 @@ object RazorpayCheckoutBridge {
             putExtra("key", keyId)
             putExtra("amount", options.optInt("amount", 10000))
             putExtra("currency", options.optString("currency", "INR"))
-            putExtra("name", options.optString("name", "ArenaWar Esports"))
+            putExtra("name", options.optString("name", "WorldWar Esports"))
             putExtra("description", options.optString("description", "Wallet Deposit"))
             putExtra("theme_color", options.optString("theme.color", "#00E5FF"))
 

@@ -81,7 +81,7 @@ class RazorpayCheckoutActivity : ComponentActivity() {
         val key = intent.getStringExtra("key") ?: Checkout.RZP_TEST_KEY_DEFAULT
         val amountPaise = intent.getIntExtra("amount", 10000)
         val amountInRupees = amountPaise / 100
-        val merchantName = intent.getStringExtra("name") ?: "ArenaWar Esports"
+        val merchantName = intent.getStringExtra("name") ?: "WorldWar Esports"
         val description = intent.getStringExtra("description") ?: "Wallet Deposit"
         val userEmail = intent.getStringExtra("email") ?: ""
         val userContact = intent.getStringExtra("contact") ?: ""

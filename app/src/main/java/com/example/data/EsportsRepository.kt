@@ -136,7 +136,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                         filledSlots = 24,
                         bannerType = "ff",
                         serverType = "Asia / TPP",
-                        organizer = "ArenaWar Official",
+                        organizer = "WorldWar Official",
                         statusText = "Open"
                     ),
                     Tournament(
@@ -154,7 +154,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                         filledSlots = 52,
                         bannerType = "bgmi",
                         serverType = "Asia / TPP",
-                        organizer = "ArenaWar Official",
+                        organizer = "WorldWar Official",
                         statusText = "Open"
                     ),
                     Tournament(
@@ -172,7 +172,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                         filledSlots = 18,
                         bannerType = "ff",
                         serverType = "Asia / TPP",
-                        organizer = "ArenaWar Official",
+                        organizer = "WorldWar Official",
                         statusText = "Open"
                     )
                 )
@@ -226,7 +226,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             val newProfile = UserProfile(
                 userId = uid,
                 username = username,
-                ingameId = "AW-${(1000..9999).random()}",
+                ingameId = "WW-${(1000..9999).random()}",
                 email = userEmail ?: "",
                 role = role,
                 level = 5,
@@ -341,7 +341,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 "filledSlots" to 0,
                 "bannerType" to banner,
                 "serverType" to "Asia / TPP",
-                "organizer" to "ArenaWar Admin",
+                "organizer" to "WorldWar Admin",
                 "statusText" to "Open"
             )
 

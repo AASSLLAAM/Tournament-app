@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "ArenaWar"
+rootProject.name = "WorldWar"
 
 include(":app")

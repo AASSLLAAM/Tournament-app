@@ -28,7 +28,7 @@ private val EsportsDarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun ArenaWarTheme(
+fun WorldWarTheme(
     darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {

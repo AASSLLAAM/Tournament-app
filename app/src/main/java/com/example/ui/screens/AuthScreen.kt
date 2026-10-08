@@ -154,7 +154,7 @@ fun AuthScreen(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "ARENA",
+                        text = "WORLD",
                         color = TextPrimary,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
@@ -377,7 +377,12 @@ fun AuthScreen(
                                 onAuthSuccess()
                             } catch (e: Exception) {
                                 isLoading = false
-                                errorMessage = e.localizedMessage ?: "Authentication failed"
+                                val msg = e.localizedMessage ?: "Authentication failed"
+                                errorMessage = if (msg.contains("operation is not allowed", ignoreCase = true) || msg.contains("sign-in provider is disabled", ignoreCase = true)) {
+                                    "Email/Password sign-in is disabled in Firebase console. Please use 'Continue with Google' below."
+                                } else {
+                                    msg
+                                }
                             }
                         }
                     },
@@ -425,8 +430,8 @@ fun AuthScreen(
                 ) {
                     HorizontalDivider(modifier = Modifier.weight(1f), color = BorderMuted)
                     Text(
-                        text = "  OR  ",
-                        color = TextMuted,
+                        text = "  RECOMMENDED  ",
+                        color = GoldAccent,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -435,8 +440,8 @@ fun AuthScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Sign in with Google Button
-                OutlinedButton(
+                // Sign in with Google Button (Recommended, 1-tap Google Sign-In)
+                Button(
                     onClick = {
                         isLoading = true
                         errorMessage = null
@@ -459,25 +464,27 @@ fun AuthScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
+                        .height(48.dp)
                         .testTag("google_sign_in_button"),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, BorderMuted),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GoldAccent,
+                        contentColor = Color.Black
+                    ),
                     enabled = !isLoading
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = GoldAccent,
-                            modifier = Modifier.size(16.dp)
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Continue with Google",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }

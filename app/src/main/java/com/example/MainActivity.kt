@@ -45,7 +45,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.WalletScreen
-import com.example.ui.theme.ArenaWarTheme
+import com.example.ui.theme.WorldWarTheme
 import com.example.ui.theme.CardNavy
 import com.example.ui.theme.DarkNavy
 import com.example.ui.theme.GoldAccent
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         }
         enableEdgeToEdge()
         setContent {
-            ArenaWarTheme {
+            WorldWarTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = DarkNavy
@@ -114,14 +114,14 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
             val currentUser = Firebase.auth.currentUser
             val options = JSONObject().apply {
-                put("name", "ArenaWar Esports")
+                put("name", "WorldWar Esports")
                 put("description", "Wallet Recharge: ₹$amount")
                 put("currency", "INR")
                 put("amount", amount * 100) // in paise (e.g. 100 INR = 10000 paise)
                 put("theme.color", "#00E5FF")
 
                 val prefill = JSONObject().apply {
-                    put("email", currentUser?.email ?: "gamer@arenawar.com")
+                    put("email", currentUser?.email ?: "gamer@worldwar.com")
                     put("contact", "9999999999")
                 }
                 put("prefill", prefill)

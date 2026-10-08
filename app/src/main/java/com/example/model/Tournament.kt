@@ -32,7 +32,7 @@ data class Tournament(
     val filledSlots: Int = 0,
     val bannerType: String = "ff", // "ff" or "bgmi"
     val serverType: String = "Asia / TPP",
-    val organizer: String = "ArenaWar Official",
+    val organizer: String = "WorldWar Official",
     val statusText: String = "Open",
     val winnerName: String? = null,
     val isJoined: Boolean = false,
@@ -62,8 +62,8 @@ data class Tournament(
 // User profile model stored in /users/{userId}
 data class UserProfile(
     val userId: String = "",
-    val username: String = "ArenaPlayer",
-    val ingameId: String = "AW-1001",
+    val username: String = "WorldPlayer",
+    val ingameId: String = "WW-1001",
     val email: String = "",
     val role: String = "player", // "admin" or "player"
     val level: Int = 5,
