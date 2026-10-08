@@ -54,7 +54,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
 import com.example.model.UserProfile
 import com.example.ui.theme.BorderCyan
 import com.example.ui.theme.BorderMuted
@@ -351,13 +350,8 @@ fun ProfileScreen(
         item {
             OutlinedButton(
                 onClick = {
-                    val credentialManager = CredentialManager.create(context)
-                    signOutUser(
-                        context = context,
-                        credentialManager = credentialManager,
-                        onSignOutComplete = onSignOut,
-                        scope = scope
-                    )
+                    Firebase.auth.signOut()
+                    onSignOut()
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp).testTag("sign_out_button"),
                 shape = RoundedCornerShape(12.dp),
