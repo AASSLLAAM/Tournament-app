@@ -1,4 +1,4 @@
-package com.example.data
+ com.example.data
 
 import android.content.Context
 import com.example.R
