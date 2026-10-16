@@ -1,10 +1,9 @@
 package com.example.ui.screens
 
-import android.app.Activity
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,19 +21,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,19 +52,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
-import com.example.R
 import com.example.ui.theme.BorderCyan
 import com.example.ui.theme.BorderMuted
 import com.example.ui.theme.CardNavy
@@ -70,83 +70,74 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
-import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import com.google.firebase.auth.userProfileChangeRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-
-private const val TAG = "AuthScreen"
 
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    var isSignUpMode by remember { mutableStateOf(false) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    fun handleGoogleSignIn() {
-        val activity = context as? Activity
-        if (activity == null) {
-            errorMessage = "Context is not an Activity."
+    fun executeEmailAuth() {
+        val cleanEmail = email.trim()
+        val cleanPassword = password.trim()
+        val cleanUsername = username.trim()
+
+        if (cleanEmail.isBlank() || cleanPassword.isBlank()) {
+            errorMessage = "Please enter both email and password."
             return
         }
 
-        val serverClientId = try {
-            context.getString(R.string.default_web_client_id)
-        } catch (e: Exception) {
-            errorMessage = "Web client ID not configured. Please ensure Firebase is provisioned."
+        if (cleanPassword.length < 6) {
+            errorMessage = "Password must be at least 6 characters."
             return
         }
 
-        val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(
-            serverClientId = serverClientId
-        ).build()
-
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(signInWithGoogleOption)
-            .build()
-
-        val credentialManager = CredentialManager.create(context)
+        isLoading = true
+        errorMessage = null
 
         coroutineScope.launch {
-            isLoading = true
-            errorMessage = null
             try {
-                val result = credentialManager.getCredential(
-                    request = request,
-                    context = activity
-                )
-                val credential = result.credential
-                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                    val idToken = googleIdTokenCredential.idToken
-                    val authCredential = GoogleAuthProvider.getCredential(idToken, null)
-                    Firebase.auth.signInWithCredential(authCredential).await()
-                    isLoading = false
-                    onAuthSuccess()
+                if (isSignUpMode) {
+                    val authResult = Firebase.auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword).await()
+                    if (cleanUsername.isNotBlank()) {
+                        authResult.user?.updateProfile(
+                            userProfileChangeRequest {
+                                displayName = cleanUsername
+                            }
+                        )?.await()
+                    }
                 } else {
-                    isLoading = false
-                    errorMessage = "Unexpected credential format returned from Google."
+                    Firebase.auth.signInWithEmailAndPassword(cleanEmail, cleanPassword).await()
                 }
-            } catch (e: GetCredentialCancellationException) {
-                Log.w(TAG, "Sign-in cancelled by user: ${e.message}")
                 isLoading = false
-            } catch (e: GetCredentialException) {
-                Log.e(TAG, "CredentialManager error", e)
-                isLoading = false
-                errorMessage = e.localizedMessage ?: "Google Sign-In failed."
+                onAuthSuccess()
             } catch (e: Exception) {
-                Log.e(TAG, "Authentication error", e)
                 isLoading = false
-                errorMessage = e.localizedMessage ?: "Authentication failed. Please try again."
+                val rawMsg = e.localizedMessage ?: "Authentication failed."
+                errorMessage = when {
+                    rawMsg.contains("invalid-credential", ignoreCase = true) ||
+                    rawMsg.contains("wrong password", ignoreCase = true) ||
+                    rawMsg.contains("no user record", ignoreCase = true) -> "Invalid email or password."
+                    rawMsg.contains("email-already-in-use", ignoreCase = true) -> "An account with this email already exists."
+                    rawMsg.contains("network error", ignoreCase = true) -> "Network error. Please check your connection."
+                    else -> rawMsg
+                }
             }
         }
     }
@@ -224,60 +215,158 @@ fun AuthScreen(
                     letterSpacing = 0.5.sp
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Text(
-                    text = "Compete in daily Free Fire MAX & BGMI scrims, win real cash prizes, and build your competitive gaming stats.",
-                    color = TextMuted,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 17.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Highlights
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(CardNavyElevated)
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                // Mode Selector (Sign In vs Sign Up)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = CardNavyElevated,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    FeatureHighlightRow(
-                        icon = Icons.Default.EmojiEvents,
-                        iconTint = GoldAccent,
-                        title = "Real Esports Contests",
-                        desc = "Solo, Duo & Squad tournaments with verified live rooms"
-                    )
-                    HorizontalDivider(color = BorderMuted.copy(alpha = 0.5f))
-                    FeatureHighlightRow(
-                        icon = Icons.Default.AccountBalanceWallet,
-                        iconTint = NeonCyan,
-                        title = "₹500 Welcome Bonus",
-                        desc = "Instant credits in your wallet to enter your first battle"
-                    )
-                    HorizontalDivider(color = BorderMuted.copy(alpha = 0.5f))
-                    FeatureHighlightRow(
-                        icon = Icons.Default.Security,
-                        iconTint = Color(0xFF00E676),
-                        title = "Verified & Fair Play",
-                        desc = "Protected with secure zero-trust cloud sync & anti-cheat"
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    isSignUpMode = false
+                                    errorMessage = null
+                                },
+                            color = if (!isSignUpMode) NeonCyan else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Sign In",
+                                color = if (!isSignUpMode) Color.Black else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    isSignUpMode = true
+                                    errorMessage = null
+                                },
+                            color = if (isSignUpMode) NeonCyan else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Create Account",
+                                color = if (isSignUpMode) Color.Black else TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Google Sign In Button
-                Button(
-                    onClick = { handleGoogleSignIn() },
+                // Optional Username field on Sign Up
+                if (isSignUpMode) {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Gamer Tag / Username") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = NeonCyan)
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("username_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderMuted,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                // Email field
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        errorMessage = null
+                    },
+                    label = { Text("Email Address") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Email, contentDescription = null, tint = NeonCyan)
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("google_sign_in_button"),
-                    shape = RoundedCornerShape(14.dp),
+                        .testTag("email_input"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = BorderMuted,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Password field
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text("Password") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = NeonCyan)
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                tint = TextMuted
+                            )
+                        }
+                    },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("password_input"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = BorderMuted,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Submit Button
+                Button(
+                    onClick = { executeEmailAuth() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("email_auth_submit_button"),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = NeonCyan,
                         contentColor = Color.Black
@@ -286,26 +375,19 @@ fun AuthScreen(
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             color = Color.Black,
-                            strokeWidth = 2.5.dp
+                            strokeWidth = 2.dp
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Connecting to Google...",
+                            text = if (isSignUpMode) "Creating Account..." else "Signing in...",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                     } else {
-                        Icon(
-                            imageVector = Icons.Default.SportsEsports,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Sign in with Google",
+                            text = if (isSignUpMode) "Create Account" else "Sign In with Email",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -323,7 +405,7 @@ fun AuthScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = "By signing in, you agree to WorldWar's Tournament Rules & Fair Play Policy.",
@@ -333,48 +415,6 @@ fun AuthScreen(
                     lineHeight = 15.sp
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun FeatureHighlightRow(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    desc: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(iconTint.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(
-                text = title,
-                color = TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = desc,
-                color = TextSecondary,
-                fontSize = 11.sp
-            )
         }
     }
 }
