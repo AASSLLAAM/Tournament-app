@@ -46,6 +46,7 @@ import com.example.data.EsportsRepository
 import com.example.ui.navigation.NavScreen
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.ErrorBoundaryScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.ProfileScreen
@@ -58,6 +59,7 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextSecondary
 import com.example.viewmodel.EsportsViewModel
+import android.util.Log
 import androidx.compose.material3.Surface
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.Firebase
@@ -79,27 +81,51 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                Checkout.preload(applicationContext)
-            } catch (_: Throwable) {
+        try {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    Checkout.preload(applicationContext)
+                } catch (_: Throwable) {
+                }
             }
-        }
-        enableEdgeToEdge()
+        } catch (_: Throwable) {}
+
+        try {
+            enableEdgeToEdge()
+        } catch (_: Throwable) {}
+
         setContent {
             WorldWarTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = DarkNavy
                 ) {
-                    AppRootContent(
-                        onInitiatePayment = { amount ->
-                            startRazorpayCheckout(amount)
-                        },
-                        onViewModelBound = { vm ->
-                            activeViewModel = vm
-                        }
-                    )
+                    var startupFatalError by remember { mutableStateOf<String?>(null) }
+
+                    val fatalError = startupFatalError
+                    if (fatalError != null) {
+                        ErrorBoundaryScreen(
+                            errorMessage = fatalError,
+                            onRetry = {
+                                startupFatalError = null
+                            },
+                            onContinueOffline = {
+                                startupFatalError = null
+                            }
+                        )
+                    } else {
+                        AppRootContent(
+                            onInitiatePayment = { amount ->
+                                startRazorpayCheckout(amount)
+                            },
+                            onViewModelBound = { vm ->
+                                activeViewModel = vm
+                            },
+                            onFatalError = { errorMsg ->
+                                startupFatalError = errorMsg
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -117,7 +143,11 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             }
             checkout.setKeyID(apiKey)
 
-            val currentUser = Firebase.auth.currentUser
+            val currentUser = try {
+                Firebase.auth.currentUser
+            } catch (_: Throwable) {
+                null
+            }
             val options = JSONObject().apply {
                 put("name", "WorldWar Esports")
                 put("description", "Wallet Recharge: ₹$amount")
@@ -158,41 +188,100 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 @Composable
 fun AppRootContent(
     onInitiatePayment: (amount: Int) -> Unit = {},
-    onViewModelBound: (EsportsViewModel) -> Unit = {}
+    onViewModelBound: (EsportsViewModel) -> Unit = {},
+    onFatalError: (String) -> Unit = {}
 ) {
-    var currentUser by remember { mutableStateOf<FirebaseUser?>(Firebase.auth.currentUser) }
+    var isGuestMode by remember { mutableStateOf(false) }
+    var currentUser by remember {
+        mutableStateOf<FirebaseUser?>(
+            try {
+                Firebase.auth.currentUser
+            } catch (e: Throwable) {
+                Log.w("MainActivity", "Firebase.auth currentUser check failed: ${e.message}")
+                null
+            }
+        )
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { auth ->
-            currentUser = auth.currentUser
+        val authInstance = try {
+            Firebase.auth
+        } catch (e: Throwable) {
+            Log.w("MainActivity", "Firebase.auth instance warning: ${e.message}")
+            null
         }
-        Firebase.auth.addAuthStateListener(listener)
+
+        val listener = if (authInstance != null) {
+            try {
+                val l = FirebaseAuth.AuthStateListener { auth ->
+                    try {
+                        currentUser = auth.currentUser
+                    } catch (_: Throwable) {}
+                }
+                authInstance.addAuthStateListener(l)
+                l
+            } catch (_: Throwable) {
+                null
+            }
+        } else null
+
         onDispose {
-            Firebase.auth.removeAuthStateListener(listener)
+            if (authInstance != null && listener != null) {
+                try {
+                    authInstance.removeAuthStateListener(listener)
+                } catch (_: Throwable) {}
+            }
         }
     }
 
     val user = currentUser
-    if (user == null) {
+    if (user == null && !isGuestMode) {
         // Auth Gated Sign-In Screen
         AuthScreen(
             onAuthSuccess = {
-                currentUser = Firebase.auth.currentUser
+                try {
+                    currentUser = Firebase.auth.currentUser
+                } catch (_: Throwable) {
+                    isGuestMode = true
+                }
+            },
+            onContinueAsGuest = {
+                isGuestMode = true
             },
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
         )
     } else {
-        // Authenticated Session: Inject Database ID and ViewModel keyed by authenticated user ID
-        val databaseId = context.getString(R.string.firestore_database_id)
-        val db = remember(databaseId) { FirebaseFirestore.getInstance(databaseId) }
-        val repository = remember(db) { EsportsRepository(db) }
+        // Authenticated Session or Guest: Safely initialize repository
+        val repository = remember {
+            try {
+                EsportsRepository(context)
+            } catch (e: Throwable) {
+                Log.e("MainActivity", "EsportsRepository creation failed: ${e.message}", e)
+                null
+            }
+        }
 
+        if (repository == null) {
+            ErrorBoundaryScreen(
+                errorMessage = "Database initialization failed. Please check network connectivity and retry.",
+                onRetry = {
+                    currentUser = null
+                    isGuestMode = false
+                },
+                onContinueOffline = {
+                    isGuestMode = true
+                }
+            )
+            return
+        }
+
+        val sessionKey = user?.uid ?: "guest_session"
         val viewModel: EsportsViewModel = viewModel(
-            key = user.uid,
+            key = sessionKey,
             factory = viewModelFactory {
                 initializer {
                     EsportsViewModel(repository)
@@ -205,10 +294,16 @@ fun AppRootContent(
             onDispose {}
         }
 
-        // Ensure user document exists with initial balance ₹500 in Firestore
-        LaunchedEffect(user.uid) {
-            scope.launch {
-                repository.ensureUserProfileExists(user.email, user.displayName)
+        // Ensure user document exists with initial balance in Firestore
+        LaunchedEffect(user?.uid) {
+            if (user != null) {
+                scope.launch {
+                    try {
+                        repository.ensureUserProfileExists(user.email, user.displayName)
+                    } catch (e: Throwable) {
+                        Log.w("MainActivity", "ensureUserProfileExists warning: ${e.message}")
+                    }
+                }
             }
         }
 
@@ -216,7 +311,11 @@ fun AppRootContent(
             viewModel = viewModel,
             onInitiatePayment = onInitiatePayment,
             onSignOut = {
+                try {
+                    Firebase.auth.signOut()
+                } catch (_: Throwable) {}
                 currentUser = null
+                isGuestMode = false
             }
         )
     }

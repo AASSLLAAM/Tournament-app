@@ -37,6 +37,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -80,6 +81,7 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
+    onContinueAsGuest: () -> Unit = onAuthSuccess,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -113,29 +115,44 @@ fun AuthScreen(
 
         coroutineScope.launch {
             try {
+                val auth = try {
+                    Firebase.auth
+                } catch (e: Throwable) {
+                    isLoading = false
+                    errorMessage = "Firebase Authentication unavailable on this device. Tap 'Continue as Guest' below."
+                    return@launch
+                }
                 if (isSignUpMode) {
-                    val authResult = Firebase.auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword).await()
+                    val authResult = auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword).await()
                     if (cleanUsername.isNotBlank()) {
-                        authResult.user?.updateProfile(
-                            userProfileChangeRequest {
-                                displayName = cleanUsername
-                            }
-                        )?.await()
+                        try {
+                            authResult.user?.updateProfile(
+                                userProfileChangeRequest {
+                                    displayName = cleanUsername
+                                }
+                            )?.await()
+                        } catch (_: Throwable) {}
                     }
                 } else {
-                    Firebase.auth.signInWithEmailAndPassword(cleanEmail, cleanPassword).await()
+                    auth.signInWithEmailAndPassword(cleanEmail, cleanPassword).await()
                 }
                 isLoading = false
                 onAuthSuccess()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 isLoading = false
                 val rawMsg = e.localizedMessage ?: "Authentication failed."
                 errorMessage = when {
                     rawMsg.contains("invalid-credential", ignoreCase = true) ||
                     rawMsg.contains("wrong password", ignoreCase = true) ||
-                    rawMsg.contains("no user record", ignoreCase = true) -> "Invalid email or password."
+                    rawMsg.contains("invalid-email", ignoreCase = true) -> "Invalid email or password."
+                    rawMsg.contains("user-not-found", ignoreCase = true) ||
+                    rawMsg.contains("no user record", ignoreCase = true) -> "No account found. Tap 'Create Account' above."
                     rawMsg.contains("email-already-in-use", ignoreCase = true) -> "An account with this email already exists."
-                    rawMsg.contains("network error", ignoreCase = true) -> "Network error. Please check your connection."
+                    rawMsg.contains("weak-password", ignoreCase = true) -> "Password is too weak. Please use at least 6 characters."
+                    rawMsg.contains("too-many-requests", ignoreCase = true) -> "Too many attempts. Please try again later."
+                    rawMsg.contains("network", ignoreCase = true) -> "Network connection issue. Tap 'Continue as Guest' below to explore."
+                    rawMsg.contains("API key", ignoreCase = true) ||
+                    rawMsg.contains("internal error", ignoreCase = true) -> "Cloud service unavailable. Tap 'Continue as Guest' below."
                     else -> rawMsg
                 }
             }
@@ -405,6 +422,28 @@ fun AuthScreen(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = onContinueAsGuest,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("guest_mode_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, BorderMuted),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SportsEsports,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = NeonCyan
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Continue as Guest (Offline Mode)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
@@ -424,6 +463,8 @@ fun signOutUser(
     onSignOutComplete: () -> Unit,
     scope: CoroutineScope
 ) {
-    Firebase.auth.signOut()
+    try {
+        Firebase.auth.signOut()
+    } catch (_: Throwable) {}
     onSignOutComplete()
 }

@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import android.util.Log
 import com.example.R
 import com.example.model.Tournament
 import com.example.model.UserProfile
@@ -9,6 +10,7 @@ import com.example.model.WalletTransaction
 import com.example.util.OperationType
 import com.example.util.handleFirestoreError
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -20,19 +22,42 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
+private const val TAG = "EsportsRepository"
+
 class EsportsRepository(private val db: FirebaseFirestore) {
 
-    constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
-    )
+    constructor(context: Context) : this(createFirestoreInstance(context))
 
-    private val auth = Firebase.auth
+    companion object {
+        fun createFirestoreInstance(context: Context): FirebaseFirestore {
+            val databaseId = try {
+                val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
+                if (resId != 0) context.getString(resId) else "ai-studio-android-tourname-a4f8aa2c-79ec-4638-bf9c-a241de520fdd"
+            } catch (_: Throwable) {
+                "ai-studio-android-tourname-a4f8aa2c-79ec-4638-bf9c-a241de520fdd"
+            }
+            return try {
+                FirebaseFirestore.getInstance(databaseId)
+            } catch (_: Throwable) {
+                FirebaseFirestore.getInstance()
+            }
+        }
+    }
+
+    private val auth: FirebaseAuth?
+        get() = try {
+            Firebase.auth
+        } catch (e: Throwable) {
+            Log.w(TAG, "FirebaseAuth instance retrieval warning: ${e.message}")
+            null
+        }
 
     fun requireUserId(): String {
-        return auth.currentUser?.uid
-            ?: throw IllegalStateException("User must be signed in before accessing Firestore.")
+        return try {
+            auth?.currentUser?.uid ?: "player_guest"
+        } catch (_: Throwable) {
+            "player_guest"
+        }
     }
 
     // 1. Observe all tournaments from Firestore
@@ -44,28 +69,27 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     .snapshots()
                     .map { snapshot ->
                         snapshot.documents.mapNotNull { doc ->
-                            doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+                            try {
+                                doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+                            } catch (_: Throwable) {
+                                null
+                            }
                         }
                     }
                     .catch { error ->
-                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
-                        // Emit empty list instead of rethrowing to avoid crashing the app
+                        handleFirestoreError(error, OperationType.LIST, path)
                         emit(emptyList())
                     }
             )
-        } catch (e: Exception) {
-            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.LIST, path)
             emit(emptyList())
         }
     }
 
     // 2. Observe user's joined tournament registrations
     fun observeUserRegistrations(): Flow<List<UserRegistration>> = flow {
-        val uid = try { requireUserId() } catch (e: Exception) {
-            // If user is not signed in, emit empty list
-            emitAll(flow { emit(emptyList<UserRegistration>()) })
-            return@flow
-        }
+        val uid = requireUserId()
         val path = "users/$uid/registrations"
         try {
             emitAll(
@@ -73,27 +97,27 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     .snapshots()
                     .map { snapshot ->
                         snapshot.documents.mapNotNull { doc ->
-                            doc.toObject(UserRegistration::class.java)?.copy(registrationId = doc.id)
+                            try {
+                                doc.toObject(UserRegistration::class.java)?.copy(registrationId = doc.id)
+                            } catch (_: Throwable) {
+                                null
+                            }
                         }
                     }
                     .catch { error ->
-                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                        handleFirestoreError(error, OperationType.LIST, path)
                         emit(emptyList())
                     }
             )
-        } catch (e: Exception) {
-            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.LIST, path)
             emit(emptyList())
         }
     }
 
     // 3. Observe user profile (including wallet balance and admin role)
     fun observeUserProfile(): Flow<UserProfile?> = flow {
-        val uid = try { requireUserId() } catch (e: Exception) {
-            // If user not signed in, emit null profile
-            emit(null)
-            return@flow
-        }
+        val uid = requireUserId()
         val path = "users/$uid"
         try {
             emitAll(
@@ -101,33 +125,32 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     .snapshots()
                     .map { snapshot ->
                         if (snapshot.exists()) {
-                            val profile = snapshot.toObject(UserProfile::class.java)
-                            val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
-                            val roleStr = snapshot.getString("role") ?: "player"
-                            profile?.copy(walletBalance = balance, role = roleStr)
+                            try {
+                                val profile = snapshot.toObject(UserProfile::class.java)
+                                val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
+                                val roleStr = snapshot.getString("role") ?: "player"
+                                profile?.copy(walletBalance = balance, role = roleStr)
+                            } catch (_: Throwable) {
+                                UserProfile(userId = uid, walletBalance = 500, role = "player")
+                            }
                         } else {
-                            null
+                            UserProfile(userId = uid, walletBalance = 500, role = "player")
                         }
                     }
                     .catch { error ->
-                        if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
-                        // On error, emit null so UI can show defaults
-                        emit(null)
+                        handleFirestoreError(error, OperationType.GET, path)
+                        emit(UserProfile(userId = uid, walletBalance = 500, role = "player"))
                     }
             )
-        } catch (e: Exception) {
-            if (e is Exception) handleFirestoreError(e, OperationType.GET, path)
-            emit(null)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.GET, path)
+            emit(UserProfile(userId = uid, walletBalance = 500, role = "player"))
         }
     }
 
     // 4. Observe user transactions
     fun observeTransactions(): Flow<List<WalletTransaction>> = flow {
-        val uid = try { requireUserId() } catch (e: Exception) {
-            // If no user, emit empty transactions list
-            emitAll(flow { emit(emptyList<WalletTransaction>()) })
-            return@flow
-        }
+        val uid = requireUserId()
         val path = "users/$uid/transactions"
         try {
             emitAll(
@@ -135,16 +158,20 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     .snapshots()
                     .map { snapshot ->
                         snapshot.documents.mapNotNull { doc ->
-                            doc.toObject(WalletTransaction::class.java)?.copy(id = doc.id)
+                            try {
+                                doc.toObject(WalletTransaction::class.java)?.copy(id = doc.id)
+                            } catch (_: Throwable) {
+                                null
+                            }
                         }
                     }
                     .catch { error ->
-                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                        handleFirestoreError(error, OperationType.LIST, path)
                         emit(emptyList())
                     }
             )
-        } catch (e: Exception) {
-            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.LIST, path)
             emit(emptyList())
         }
     }
@@ -212,28 +239,30 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 )
 
                 for (tour in seedData) {
-                    val map = mapOf(
-                        "id" to tour.id,
-                        "title" to tour.title,
-                        "gameCategoryName" to tour.gameCategoryName,
-                        "map" to tour.map,
-                        "formatName" to tour.formatName,
-                        "scheduleTime" to tour.scheduleTime,
-                        "scheduleDate" to tour.scheduleDate,
-                        "entryFee" to tour.entryFee,
-                        "prizePool" to tour.prizePool,
-                        "perKill" to tour.perKill,
-                        "totalSlots" to tour.totalSlots,
-                        "filledSlots" to tour.filledSlots,
-                        "bannerType" to tour.bannerType,
-                        "serverType" to tour.serverType,
-                        "organizer" to tour.organizer,
-                        "statusText" to tour.statusText
-                    )
-                    db.collection("tournaments").document(tour.id).set(map).await()
+                    try {
+                        val map = mapOf(
+                            "id" to tour.id,
+                            "title" to tour.title,
+                            "gameCategoryName" to tour.gameCategoryName,
+                            "map" to tour.map,
+                            "formatName" to tour.formatName,
+                            "scheduleTime" to tour.scheduleTime,
+                            "scheduleDate" to tour.scheduleDate,
+                            "entryFee" to tour.entryFee,
+                            "prizePool" to tour.prizePool,
+                            "perKill" to tour.perKill,
+                            "totalSlots" to tour.totalSlots,
+                            "filledSlots" to tour.filledSlots,
+                            "bannerType" to tour.bannerType,
+                            "serverType" to tour.serverType,
+                            "organizer" to tour.organizer,
+                            "statusText" to tour.statusText
+                        )
+                        db.collection("tournaments").document(tour.id).set(map).await()
+                    } catch (_: Throwable) {}
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.WRITE, "tournaments")
         }
     }
@@ -241,18 +270,32 @@ class EsportsRepository(private val db: FirebaseFirestore) {
     // Ensure user profile document exists with role
     suspend fun ensureUserProfileExists(userEmail: String?, displayName: String?): UserProfile {
         val uid = requireUserId()
-        val userDocRef = db.collection("users").document(uid)
+        val defaultProfile = UserProfile(
+            userId = uid,
+            username = displayName?.ifBlank { null } ?: userEmail?.substringBefore("@")?.ifBlank { null } ?: "WorldPlayer",
+            ingameId = "WW-${(1000..9999).random()}",
+            email = userEmail ?: "",
+            role = "player",
+            level = 1,
+            tier = "PRO WARRIOR",
+            walletBalance = 500
+        )
+
         try {
-            val snapshot = userDocRef.get().await()
+            val userDocRef = db.collection("users").document(uid)
+            val snapshot = try { userDocRef.get().await() } catch (_: Throwable) { null }
 
             // Check if user is registered in admins collection or matches bootstrap email
-            val adminDoc = db.collection("admins").document(uid).get().await()
-            val isUserAdmin = adminDoc.exists() ||
-                    (userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true))
+            val isUserAdmin = try {
+                val adminDoc = db.collection("admins").document(uid).get().await()
+                adminDoc.exists() || (userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true))
+            } catch (_: Throwable) {
+                userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true)
+            }
 
             val role = if (isUserAdmin) "admin" else "player"
 
-            return if (!snapshot.exists()) {
+            if (snapshot == null || !snapshot.exists()) {
                 val initialBalance = 500
                 val username = displayName?.ifBlank { null }
                     ?: userEmail?.substringBefore("@")?.ifBlank { null }
@@ -284,56 +327,58 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     "walletBalance" to initialBalance,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
-                userDocRef.set(profileMap).await()
+                try {
+                    userDocRef.set(profileMap).await()
+                } catch (_: Throwable) {}
 
                 // If user is admin, guarantee presence in /admins collection
                 if (isUserAdmin) {
-                    db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                    try {
+                        db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                    } catch (_: Throwable) {}
                 }
 
                 // Record initial welcome bonus
-                val txId = "tx_welcome_${System.currentTimeMillis() % 100000}"
-                val txMap = mapOf(
-                    "id" to txId,
-                    "userId" to uid,
-                    "title" to "Sign-up Welcome Bonus",
-                    "amount" to initialBalance,
-                    "isCredit" to true,
-                    "date" to "Just now",
-                    "status" to "Success",
-                    "timestamp" to FieldValue.serverTimestamp()
-                )
-                userDocRef.collection("transactions").document(txId).set(txMap).await()
+                try {
+                    val txId = "tx_welcome_${System.currentTimeMillis() % 100000}"
+                    val txMap = mapOf(
+                        "id" to txId,
+                        "userId" to uid,
+                        "title" to "Sign-up Welcome Bonus",
+                        "amount" to initialBalance,
+                        "isCredit" to true,
+                        "date" to "Just now",
+                        "status" to "Success",
+                        "timestamp" to FieldValue.serverTimestamp()
+                    )
+                    userDocRef.collection("transactions").document(txId).set(txMap).await()
+                } catch (_: Throwable) {}
 
-                newProfile
+                return newProfile
             } else {
                 val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
                 val existingRole = snapshot.getString("role") ?: role
 
                 // Update role if user is recognized as admin
                 if (isUserAdmin && existingRole != "admin") {
-                    userDocRef.update("role", "admin").await()
-                    db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                    try {
+                        userDocRef.update("role", "admin").await()
+                        db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                    } catch (_: Throwable) {}
                 }
 
-                snapshot.toObject(UserProfile::class.java)?.copy(
-                    walletBalance = balance,
-                    role = if (isUserAdmin) "admin" else existingRole
-                ) ?: UserProfile(userId = uid, walletBalance = balance, role = role)
+                return try {
+                    snapshot.toObject(UserProfile::class.java)?.copy(
+                        walletBalance = balance,
+                        role = if (isUserAdmin) "admin" else existingRole
+                    ) ?: defaultProfile.copy(walletBalance = balance, role = role)
+                } catch (_: Throwable) {
+                    defaultProfile.copy(walletBalance = balance, role = role)
+                }
             }
-        } catch (e: Exception) {
-            // Handle error and return a safe default profile to avoid crashes on startup
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.GET, "users/$uid")
-            return UserProfile(
-                userId = uid,
-                username = userEmail?.substringBefore("@")?.ifBlank { null } ?: "WorldPlayer",
-                ingameId = "",
-                email = userEmail ?: "",
-                role = "player",
-                level = 1,
-                tier = "PRO WARRIOR",
-                walletBalance = 500
-            )
+            return defaultProfile
         }
     }
 
@@ -347,12 +392,12 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
             userDocRef.update("role", newRole).await()
             if (enable) {
-                adminDocRef.set(mapOf("uid" to uid, "email" to (auth.currentUser?.email ?: ""))).await()
+                adminDocRef.set(mapOf("uid" to uid, "email" to (auth?.currentUser?.email ?: ""))).await()
             } else {
                 adminDocRef.delete().await()
             }
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.UPDATE, "users/$uid")
             Result.failure(e)
         }
@@ -396,7 +441,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
             db.collection("tournaments").document(tourId).set(tourMap).await()
             Result.success(tourId)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.CREATE, "tournaments")
             Result.failure(e)
         }
@@ -414,7 +459,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 )
             ).await()
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.UPDATE, "tournaments/$tournamentId")
             Result.failure(e)
         }
@@ -445,7 +490,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             )
             userDocRef.collection("transactions").document(txId).set(txMap).await()
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.UPDATE, "users/$uid")
             Result.failure(e)
         }
@@ -479,7 +524,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             )
             userDocRef.collection("transactions").document(txId).set(txMap).await()
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.UPDATE, "users/$uid")
             Result.failure(e)
         }
@@ -520,7 +565,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             )
             userDocRef.collection("transactions").document(txId).set(txMap).await()
             Result.success(txId)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.UPDATE, "users/$uid")
             Result.failure(e)
         }
@@ -534,8 +579,8 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         val regDocRef = userDocRef.collection("registrations").document(tournament.id)
 
         try {
-            val existingReg = regDocRef.get().await()
-            if (existingReg.exists()) {
+            val existingReg = try { regDocRef.get().await() } catch (_: Throwable) { null }
+            if (existingReg != null && existingReg.exists()) {
                 return Result.failure(IllegalStateException("You have already joined this tournament!"))
             }
 
@@ -597,11 +642,13 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                     "status" to "Success",
                     "timestamp" to FieldValue.serverTimestamp()
                 )
-                userDocRef.collection("transactions").document(txId).set(txMap).await()
+                try {
+                    userDocRef.collection("transactions").document(txId).set(txMap).await()
+                } catch (_: Throwable) {}
             }
 
             return Result.success("Joined ${tournament.title}! Room ID: $roomId, Pass: $roomPassword")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.WRITE, "users/$uid/registrations/${tournament.id}")
             return Result.failure(e)
         }

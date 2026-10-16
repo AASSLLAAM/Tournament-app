@@ -14,30 +14,46 @@ enum class OperationType(val value: String) {
     WRITE("write"),
 }
 
-fun handleFirestoreError(exception: Exception, operationType: OperationType, path: String?): String {
-    val auth = FirebaseAuth.getInstance()
-    val currentUser = auth.currentUser
+fun handleFirestoreError(exception: Throwable, operationType: OperationType, path: String?): String {
+    val auth = try {
+        FirebaseAuth.getInstance()
+    } catch (_: Throwable) {
+        null
+    }
+    val currentUser = try {
+        auth?.currentUser
+    } catch (_: Throwable) {
+        null
+    }
 
-    val providerInfoList = currentUser?.providerData?.map { provider ->
-        JSONObject().apply {
-            put("providerId", provider.providerId)
-            put("email", provider.email)
-        }
-    } ?: emptyList()
+    val providerInfoList = try {
+        currentUser?.providerData?.map { provider ->
+            JSONObject().apply {
+                put("providerId", provider.providerId)
+                put("email", provider.email)
+            }
+        } ?: emptyList()
+    } catch (_: Throwable) {
+        emptyList()
+    }
 
     val authInfoJson = JSONObject().apply {
-        put("userId", currentUser?.uid)
-        put("email", currentUser?.email)
-        put("emailVerified", currentUser?.isEmailVerified)
-        put("tenantId", currentUser?.tenantId)
-        put("providerInfo", JSONArray(providerInfoList))
+        try {
+            put("userId", currentUser?.uid)
+            put("email", currentUser?.email)
+            put("emailVerified", currentUser?.isEmailVerified)
+            put("tenantId", currentUser?.tenantId)
+            put("providerInfo", JSONArray(providerInfoList))
+        } catch (_: Throwable) {}
     }
 
     val errorInfoJson = JSONObject().apply {
-        put("error", exception.message ?: exception.toString())
-        put("operationType", operationType.value)
-        put("path", path)
-        put("authInfo", authInfoJson)
+        try {
+            put("error", exception.message ?: exception.toString())
+            put("operationType", operationType.value)
+            put("path", path)
+            put("authInfo", authInfoJson)
+        } catch (_: Throwable) {}
     }
 
     val jsonString = errorInfoJson.toString()
