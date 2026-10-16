@@ -81,24 +81,23 @@ fun AuthScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+   var email by remember { mutableStateOf("") }
+var password by remember { mutableStateOf("") }
 
-    fun signInWithEmail() {
-        coroutineScope.launch {
-            isLoading = true
-            errorMessage = null
-            try {
-                Firebase.auth.signInWithEmailAndPassword(email.trim(), password).await()
-                isLoading = false
-                onAuthSuccess()
-            } catch (e: Exception) {
-                Log.e(TAG, "Email sign-in failed", e)
-                isLoading = false
-                errorMessage = e.localizedMessage ?: "Sign in failed. Please check your credentials and try again."
-            }
+fun signInWithEmail() {
+    coroutineScope.launch {
+        isLoading = true
+        errorMessage = null
+        try {
+            Firebase.auth.signInWithEmailAndPassword(email.trim(), password).await()
+            isLoading = false
+            onAuthSuccess()
+        } catch (e: Exception) {
+            isLoading = false
+            errorMessage = e.localizedMessage ?: "Sign in failed."
         }
     }
+} 
 
     Box(
         modifier = Modifier
