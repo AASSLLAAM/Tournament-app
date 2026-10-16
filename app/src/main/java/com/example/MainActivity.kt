@@ -7,8 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -175,7 +180,10 @@ fun AppRootContent(
         AuthScreen(
             onAuthSuccess = {
                 currentUser = Firebase.auth.currentUser
-            }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
         )
     } else {
         // Authenticated Session: Inject Database ID and ViewModel keyed by authenticated user ID
@@ -245,13 +253,16 @@ fun MainAppContainer(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = DarkNavy,
+        contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar(
                 modifier = Modifier
-                    .testTag("bottom_nav_bar")
-                    .windowInsetsPadding(WindowInsets.navigationBars),
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .testTag("bottom_nav_bar"),
                 containerColor = CardNavy,
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 tonalElevation = 8.dp
             ) {
                 NavScreen.entries.forEach { screen ->
@@ -295,7 +306,9 @@ fun MainAppContainer(
                     walletBalance = walletBalance,
                     selectedCategory = selectedCategory,
                     onNavigateToWallet = { currentScreen = NavScreen.WALLET },
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 )
             }
             NavScreen.WALLET -> {
@@ -304,14 +317,18 @@ fun MainAppContainer(
                     walletBalance = walletBalance,
                     transactions = transactions,
                     onInitiateRazorpayPayment = onInitiatePayment,
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 )
             }
             NavScreen.MY_MATCHES -> {
                 MyMatchesScreen(
                     tournaments = tournaments,
                     onExploreTournaments = { currentScreen = NavScreen.HOME },
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 )
             }
             NavScreen.PROFILE -> {
@@ -321,7 +338,9 @@ fun MainAppContainer(
                     onNavigateToWallet = { currentScreen = NavScreen.WALLET },
                     onNavigateToAdmin = { currentScreen = NavScreen.ADMIN },
                     onSignOut = onSignOut,
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 )
             }
             NavScreen.ADMIN -> {
@@ -330,7 +349,9 @@ fun MainAppContainer(
                     userProfile = userProfile,
                     tournaments = tournaments,
                     onBack = { currentScreen = NavScreen.HOME },
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 )
             }
         }

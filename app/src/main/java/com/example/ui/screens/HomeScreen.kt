@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -93,7 +94,7 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("home_screen"),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
     ) {
         // App Top Bar Header
         item {
@@ -199,7 +200,7 @@ fun HomeScreen(
                 )
             },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = item.title,
                         color = NeonCyan,
@@ -291,7 +292,7 @@ fun HomeScreen(
                 Text(item.title, color = TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = "Game: ${item.gameCategory.displayName} (${item.format.label})",
                         color = NeonCyan,

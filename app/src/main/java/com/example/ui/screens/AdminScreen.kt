@@ -172,7 +172,7 @@ fun AdminScreen(
             .fillMaxSize()
             .testTag("admin_screen")
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(bottom = 32.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {

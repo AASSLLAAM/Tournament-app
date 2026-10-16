@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
@@ -12,7 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -32,8 +36,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,10 +51,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import com.example.R
 import com.example.ui.theme.BorderCyan
 import com.example.ui.theme.BorderMuted
 import com.example.ui.theme.CardNavy
@@ -63,7 +70,10 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -73,7 +83,8 @@ private const val TAG = "AuthScreen"
 
 @Composable
 fun AuthScreen(
-    onAuthSuccess: () -> Unit
+    onAuthSuccess: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -81,29 +92,73 @@ fun AuthScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-   var email by remember { mutableStateOf("") }
-var password by remember { mutableStateOf("") }
+    fun handleGoogleSignIn() {
+        val activity = context as? Activity
+        if (activity == null) {
+            errorMessage = "Context is not an Activity."
+            return
+        }
 
-fun signInWithEmail() {
-    coroutineScope.launch {
-        isLoading = true
-        errorMessage = null
-        try {
-            Firebase.auth.signInWithEmailAndPassword(email.trim(), password).await()
-            isLoading = false
-            onAuthSuccess()
+        val serverClientId = try {
+            context.getString(R.string.default_web_client_id)
         } catch (e: Exception) {
-            isLoading = false
-            errorMessage = e.localizedMessage ?: "Sign in failed."
+            errorMessage = "Web client ID not configured. Please ensure Firebase is provisioned."
+            return
+        }
+
+        val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(
+            serverClientId = serverClientId
+        ).build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(signInWithGoogleOption)
+            .build()
+
+        val credentialManager = CredentialManager.create(context)
+
+        coroutineScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                val result = credentialManager.getCredential(
+                    request = request,
+                    context = activity
+                )
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    val idToken = googleIdTokenCredential.idToken
+                    val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+                    Firebase.auth.signInWithCredential(authCredential).await()
+                    isLoading = false
+                    onAuthSuccess()
+                } else {
+                    isLoading = false
+                    errorMessage = "Unexpected credential format returned from Google."
+                }
+            } catch (e: GetCredentialCancellationException) {
+                Log.w(TAG, "Sign-in cancelled by user: ${e.message}")
+                isLoading = false
+            } catch (e: GetCredentialException) {
+                Log.e(TAG, "CredentialManager error", e)
+                isLoading = false
+                errorMessage = e.localizedMessage ?: "Google Sign-In failed."
+            } catch (e: Exception) {
+                Log.e(TAG, "Authentication error", e)
+                isLoading = false
+                errorMessage = e.localizedMessage ?: "Authentication failed. Please try again."
+            }
         }
     }
-} 
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(DarkNavy)
-            .padding(16.dp),
+            .safeDrawingPadding()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
@@ -215,36 +270,13 @@ fun signInWithEmail() {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Email / Password fields
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("email_field")
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("password_field")
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
+                // Google Sign In Button
                 Button(
-                    onClick = { signInWithEmail() },
+                    onClick = { handleGoogleSignIn() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .testTag("email_sign_in_button"),
+                        .testTag("google_sign_in_button"),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = NeonCyan,
@@ -260,13 +292,20 @@ fun signInWithEmail() {
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Signing in...",
+                            text = "Connecting to Google...",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                     } else {
+                        Icon(
+                            imageVector = Icons.Default.SportsEsports,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Sign in",
+                            text = "Sign in with Google",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )

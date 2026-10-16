@@ -86,7 +86,7 @@ fun ProfileScreen(
             .fillMaxSize()
             .testTag("profile_screen")
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
