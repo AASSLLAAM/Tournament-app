@@ -1,5 +1,4 @@
 package com.example.ui.screens
-
 import android.app.Activity
 import android.content.Context
 import android.util.Log
