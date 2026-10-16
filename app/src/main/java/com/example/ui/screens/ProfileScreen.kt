@@ -25,7 +25,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
@@ -358,7 +358,7 @@ fun ProfileScreen(
                 border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.6f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF5252))
             ) {
-                Icon(imageVector = Icons.Default.Logout, contentDescription = "Sign Out", modifier = Modifier.size(18.dp))
+                Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign Out", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Sign Out", fontWeight = FontWeight.Bold)
             }
