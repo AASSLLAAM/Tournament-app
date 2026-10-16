@@ -326,7 +326,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             handleFirestoreError(e, OperationType.GET, "users/$uid")
             return UserProfile(
                 userId = uid,
-                username = null,
+                username = userEmail?.substringBefore("@")?.ifBlank { null } ?: "WorldPlayer",
                 ingameId = "",
                 email = userEmail ?: "",
                 role = "player",

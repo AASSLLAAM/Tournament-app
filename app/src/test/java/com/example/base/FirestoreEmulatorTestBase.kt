@@ -31,6 +31,7 @@ abstract class FirestoreEmulatorTestBase {
 
   @Before
   open fun setUpFirebase() {
+    org.junit.Assume.assumeTrue("Firebase emulator not running", isEmulatorRunning())
     val context = ApplicationProvider.getApplicationContext<Context>()
     val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
     databaseId = if (resId != 0) context.getString(resId) else "ai-studio-android-arenawar-a7652509-8d0e-4c95-a626-92d787e80b65"
@@ -73,7 +74,9 @@ abstract class FirestoreEmulatorTestBase {
 
   @After
   open fun tearDownFirebase() {
-    auth.signOut()
+    if (::auth.isInitialized) {
+      auth.signOut()
+    }
   }
 
   protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
@@ -85,6 +88,17 @@ abstract class FirestoreEmulatorTestBase {
       }
       val user = checkNotNull(result.user) { "User auth failed" }
       user.uid
+    }
+  }
+
+  private fun isEmulatorRunning(): Boolean {
+    return try {
+      java.net.Socket().use { socket ->
+        socket.connect(java.net.InetSocketAddress(EMULATOR_HOST, FIRESTORE_PORT), 300)
+        true
+      }
+    } catch (_: Exception) {
+      false
     }
   }
 
