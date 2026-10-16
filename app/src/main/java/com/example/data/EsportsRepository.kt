@@ -1,4 +1,4 @@
- com.example.data
+package com.example.data
 
 import android.content.Context
 import com.example.R
@@ -38,81 +38,115 @@ class EsportsRepository(private val db: FirebaseFirestore) {
     // 1. Observe all tournaments from Firestore
     fun observeTournaments(): Flow<List<Tournament>> = flow {
         val path = "tournaments"
-        emitAll(
-            db.collection(path)
-                .snapshots()
-                .map { snapshot ->
-                    snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+        try {
+            emitAll(
+                db.collection(path)
+                    .snapshots()
+                    .map { snapshot ->
+                        snapshot.documents.mapNotNull { doc ->
+                            doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+                        }
                     }
-                }
-                .catch { error ->
-                    if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
-                    throw error
-                }
-        )
+                    .catch { error ->
+                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                        // Emit empty list instead of rethrowing to avoid crashing the app
+                        emit(emptyList())
+                    }
+            )
+        } catch (e: Exception) {
+            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+            emit(emptyList())
+        }
     }
 
     // 2. Observe user's joined tournament registrations
     fun observeUserRegistrations(): Flow<List<UserRegistration>> = flow {
-        val uid = requireUserId()
+        val uid = try { requireUserId() } catch (e: Exception) {
+            // If user is not signed in, emit empty list
+            emitAll(flow { emit(emptyList<UserRegistration>()) })
+            return@flow
+        }
         val path = "users/$uid/registrations"
-        emitAll(
-            db.collection("users").document(uid).collection("registrations")
-                .snapshots()
-                .map { snapshot ->
-                    snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(UserRegistration::class.java)?.copy(registrationId = doc.id)
+        try {
+            emitAll(
+                db.collection("users").document(uid).collection("registrations")
+                    .snapshots()
+                    .map { snapshot ->
+                        snapshot.documents.mapNotNull { doc ->
+                            doc.toObject(UserRegistration::class.java)?.copy(registrationId = doc.id)
+                        }
                     }
-                }
-                .catch { error ->
-                    if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
-                    throw error
-                }
-        )
+                    .catch { error ->
+                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                        emit(emptyList())
+                    }
+            )
+        } catch (e: Exception) {
+            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+            emit(emptyList())
+        }
     }
 
     // 3. Observe user profile (including wallet balance and admin role)
     fun observeUserProfile(): Flow<UserProfile?> = flow {
-        val uid = requireUserId()
+        val uid = try { requireUserId() } catch (e: Exception) {
+            // If user not signed in, emit null profile
+            emit(null)
+            return@flow
+        }
         val path = "users/$uid"
-        emitAll(
-            db.collection("users").document(uid)
-                .snapshots()
-                .map { snapshot ->
-                    if (snapshot.exists()) {
-                        val profile = snapshot.toObject(UserProfile::class.java)
-                        val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
-                        val roleStr = snapshot.getString("role") ?: "player"
-                        profile?.copy(walletBalance = balance, role = roleStr)
-                    } else {
-                        null
+        try {
+            emitAll(
+                db.collection("users").document(uid)
+                    .snapshots()
+                    .map { snapshot ->
+                        if (snapshot.exists()) {
+                            val profile = snapshot.toObject(UserProfile::class.java)
+                            val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
+                            val roleStr = snapshot.getString("role") ?: "player"
+                            profile?.copy(walletBalance = balance, role = roleStr)
+                        } else {
+                            null
+                        }
                     }
-                }
-                .catch { error ->
-                    if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
-                    throw error
-                }
-        )
+                    .catch { error ->
+                        if (error is Exception) handleFirestoreError(error, OperationType.GET, path)
+                        // On error, emit null so UI can show defaults
+                        emit(null)
+                    }
+            )
+        } catch (e: Exception) {
+            if (e is Exception) handleFirestoreError(e, OperationType.GET, path)
+            emit(null)
+        }
     }
 
     // 4. Observe user transactions
     fun observeTransactions(): Flow<List<WalletTransaction>> = flow {
-        val uid = requireUserId()
+        val uid = try { requireUserId() } catch (e: Exception) {
+            // If no user, emit empty transactions list
+            emitAll(flow { emit(emptyList<WalletTransaction>()) })
+            return@flow
+        }
         val path = "users/$uid/transactions"
-        emitAll(
-            db.collection("users").document(uid).collection("transactions")
-                .snapshots()
-                .map { snapshot ->
-                    snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(WalletTransaction::class.java)?.copy(id = doc.id)
+        try {
+            emitAll(
+                db.collection("users").document(uid).collection("transactions")
+                    .snapshots()
+                    .map { snapshot ->
+                        snapshot.documents.mapNotNull { doc ->
+                            doc.toObject(WalletTransaction::class.java)?.copy(id = doc.id)
+                        }
                     }
-                }
-                .catch { error ->
-                    if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
-                    throw error
-                }
-        )
+                    .catch { error ->
+                        if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                        emit(emptyList())
+                    }
+            )
+        } catch (e: Exception) {
+            if (e is Exception) handleFirestoreError(e, OperationType.LIST, path)
+            emit(emptyList())
+        }
     }
 
     // Seed default tournaments if empty
@@ -208,83 +242,98 @@ class EsportsRepository(private val db: FirebaseFirestore) {
     suspend fun ensureUserProfileExists(userEmail: String?, displayName: String?): UserProfile {
         val uid = requireUserId()
         val userDocRef = db.collection("users").document(uid)
-        val snapshot = userDocRef.get().await()
+        try {
+            val snapshot = userDocRef.get().await()
 
-        // Check if user is registered in admins collection or matches bootstrap email
-        val adminDoc = db.collection("admins").document(uid).get().await()
-        val isUserAdmin = adminDoc.exists() ||
-                (userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true))
+            // Check if user is registered in admins collection or matches bootstrap email
+            val adminDoc = db.collection("admins").document(uid).get().await()
+            val isUserAdmin = adminDoc.exists() ||
+                    (userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true))
 
-        val role = if (isUserAdmin) "admin" else "player"
+            val role = if (isUserAdmin) "admin" else "player"
 
-        return if (!snapshot.exists()) {
-            val initialBalance = 500
-            val username = displayName?.ifBlank { null }
-                ?: userEmail?.substringBefore("@")?.ifBlank { null }
-                ?: "Player_${uid.take(4)}"
+            return if (!snapshot.exists()) {
+                val initialBalance = 500
+                val username = displayName?.ifBlank { null }
+                    ?: userEmail?.substringBefore("@")?.ifBlank { null }
+                    ?: "Player_${uid.take(4)}"
 
-            val newProfile = UserProfile(
+                val newProfile = UserProfile(
+                    userId = uid,
+                    username = username,
+                    ingameId = "WW-${(1000..9999).random()}",
+                    email = userEmail ?: "",
+                    role = role,
+                    level = 5,
+                    tier = if (isUserAdmin) "TOURNAMENT ADMIN" else "PRO WARRIOR",
+                    walletBalance = initialBalance
+                )
+
+                val profileMap = mapOf(
+                    "userId" to uid,
+                    "username" to newProfile.username,
+                    "ingameId" to newProfile.ingameId,
+                    "email" to newProfile.email,
+                    "role" to role,
+                    "level" to newProfile.level,
+                    "tier" to newProfile.tier,
+                    "matchesPlayed" to 0,
+                    "totalWins" to 0,
+                    "totalKills" to 0,
+                    "winRate" to "0%",
+                    "walletBalance" to initialBalance,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                userDocRef.set(profileMap).await()
+
+                // If user is admin, guarantee presence in /admins collection
+                if (isUserAdmin) {
+                    db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                }
+
+                // Record initial welcome bonus
+                val txId = "tx_welcome_${System.currentTimeMillis() % 100000}"
+                val txMap = mapOf(
+                    "id" to txId,
+                    "userId" to uid,
+                    "title" to "Sign-up Welcome Bonus",
+                    "amount" to initialBalance,
+                    "isCredit" to true,
+                    "date" to "Just now",
+                    "status" to "Success",
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                userDocRef.collection("transactions").document(txId).set(txMap).await()
+
+                newProfile
+            } else {
+                val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
+                val existingRole = snapshot.getString("role") ?: role
+
+                // Update role if user is recognized as admin
+                if (isUserAdmin && existingRole != "admin") {
+                    userDocRef.update("role", "admin").await()
+                    db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
+                }
+
+                snapshot.toObject(UserProfile::class.java)?.copy(
+                    walletBalance = balance,
+                    role = if (isUserAdmin) "admin" else existingRole
+                ) ?: UserProfile(userId = uid, walletBalance = balance, role = role)
+            }
+        } catch (e: Exception) {
+            // Handle error and return a safe default profile to avoid crashes on startup
+            handleFirestoreError(e, OperationType.GET, "users/$uid")
+            return UserProfile(
                 userId = uid,
-                username = username,
-                ingameId = "WW-${(1000..9999).random()}",
+                username = null,
+                ingameId = "",
                 email = userEmail ?: "",
-                role = role,
-                level = 5,
-                tier = if (isUserAdmin) "TOURNAMENT ADMIN" else "PRO WARRIOR",
-                walletBalance = initialBalance
+                role = "player",
+                level = 1,
+                tier = "PRO WARRIOR",
+                walletBalance = 500
             )
-
-            val profileMap = mapOf(
-                "userId" to uid,
-                "username" to newProfile.username,
-                "ingameId" to newProfile.ingameId,
-                "email" to newProfile.email,
-                "role" to role,
-                "level" to newProfile.level,
-                "tier" to newProfile.tier,
-                "matchesPlayed" to 0,
-                "totalWins" to 0,
-                "totalKills" to 0,
-                "winRate" to "0%",
-                "walletBalance" to initialBalance,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-            userDocRef.set(profileMap).await()
-
-            // If user is admin, guarantee presence in /admins collection
-            if (isUserAdmin) {
-                db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
-            }
-
-            // Record initial welcome bonus
-            val txId = "tx_welcome_${System.currentTimeMillis() % 100000}"
-            val txMap = mapOf(
-                "id" to txId,
-                "userId" to uid,
-                "title" to "Sign-up Welcome Bonus",
-                "amount" to initialBalance,
-                "isCredit" to true,
-                "date" to "Just now",
-                "status" to "Success",
-                "timestamp" to FieldValue.serverTimestamp()
-            )
-            userDocRef.collection("transactions").document(txId).set(txMap).await()
-
-            newProfile
-        } else {
-            val balance = (snapshot.getLong("walletBalance") ?: 500L).toInt()
-            val existingRole = snapshot.getString("role") ?: role
-
-            // Update role if user is recognized as admin
-            if (isUserAdmin && existingRole != "admin") {
-                userDocRef.update("role", "admin").await()
-                db.collection("admins").document(uid).set(mapOf("uid" to uid, "email" to (userEmail ?: ""))).await()
-            }
-
-            snapshot.toObject(UserProfile::class.java)?.copy(
-                walletBalance = balance,
-                role = if (isUserAdmin) "admin" else existingRole
-            ) ?: UserProfile(userId = uid, walletBalance = balance, role = role)
         }
     }
 
