@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.EsportsRepository
 import com.example.model.GameCategory
+import com.example.model.MatchResult
 import com.example.model.PaymentSuccessInfo
 import com.example.model.Tournament
 import com.example.model.UserProfile
 import com.example.model.UserRegistration
 import com.example.model.WalletTransaction
 import com.example.model.WithdrawalSuccessInfo
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -299,6 +301,53 @@ class EsportsViewModel(
                 _snackbarMessage.value = if (enable) "Admin access granted!" else "Switched to standard player mode"
             } else {
                 _snackbarMessage.value = result.exceptionOrNull()?.message ?: "Failed to update role"
+            }
+        }
+    }
+
+    // Observe Match Leaderboard for a tournament
+    fun getMatchResults(tournamentId: String): Flow<List<MatchResult>> {
+        return repository.observeMatchResults(tournamentId)
+    }
+
+    // Admin: Save / Update Match Result in leaderboard
+    fun saveMatchResult(
+        tournamentId: String,
+        resultId: String = "",
+        rank: Int,
+        teamName: String,
+        playerName: String,
+        kills: Int,
+        points: Int,
+        prizeWon: Int = 0,
+        onSuccess: () -> Unit = {}
+    ) {
+        if (teamName.isBlank() && playerName.isBlank()) {
+            _snackbarMessage.value = "Please enter team or player name."
+            return
+        }
+        _isAdminActionLoading.value = true
+        viewModelScope.launch {
+            try {
+                val matchResult = MatchResult(
+                    id = resultId,
+                    tournamentId = tournamentId,
+                    rank = rank,
+                    teamName = teamName.trim(),
+                    playerName = playerName.trim(),
+                    kills = kills,
+                    points = points,
+                    prizeWon = prizeWon
+                )
+                val res = repository.saveMatchResult(tournamentId, matchResult)
+                if (res.isSuccess) {
+                    _snackbarMessage.value = "Saved stats for rank #$rank ($teamName)!"
+                    onSuccess()
+                } else {
+                    _snackbarMessage.value = res.exceptionOrNull()?.message ?: "Failed to save match result"
+                }
+            } finally {
+                _isAdminActionLoading.value = false
             }
         }
     }

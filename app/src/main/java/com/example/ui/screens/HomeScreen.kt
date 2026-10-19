@@ -76,6 +76,7 @@ fun HomeScreen(
     walletBalance: Int,
     selectedCategory: GameCategory,
     onNavigateToWallet: () -> Unit,
+    onNavigateToMatchDetails: (Tournament) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var tournamentToJoin by remember { mutableStateOf<Tournament?>(null) }
@@ -181,7 +182,8 @@ fun HomeScreen(
                 TournamentCard(
                     tournament = tournament,
                     onJoinClick = { tournamentToJoin = tournament },
-                    onDetailsClick = { tournamentDetail = tournament },
+                    onDetailsClick = { onNavigateToMatchDetails(tournament) },
+                    onViewResultsClick = { onNavigateToMatchDetails(tournament) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
             }

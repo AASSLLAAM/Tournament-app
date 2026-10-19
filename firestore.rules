@@ -27,10 +27,12 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Admin role check: checks /admins collection or admin email
+    // Admin role check: checks /admins collection or user role or admin email
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
         (request.auth.token.email != null && request.auth.token.email == 'aslamhussain096@gmail.com')
       );
     }
@@ -66,6 +68,12 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+
+      // Match Results / Leaderboard Subcollection
+      match /results/{resultId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
     // 2. User Profile:

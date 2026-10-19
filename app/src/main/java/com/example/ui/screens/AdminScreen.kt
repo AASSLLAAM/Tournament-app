@@ -1,8 +1,10 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,8 +90,14 @@ fun AdminScreen(
     userProfile: UserProfile,
     tournaments: List<Tournament>,
     onBack: () -> Unit,
+    onNavigateToMatchDetails: (Tournament) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // Physical back button handler works properly on Admin screen
+    BackHandler {
+        onBack()
+    }
+
     val isAdmin = userProfile.isAdmin
     val isAdminLoading by viewModel.isAdminActionLoading.collectAsState()
 
@@ -182,27 +190,40 @@ fun AdminScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.testTag("admin_back_btn")
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.AdminPanelSettings,
-                            contentDescription = null,
-                            tint = GoldAccent,
-                            modifier = Modifier.size(26.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Admin Studio",
-                            color = TextPrimary,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = NeonCyan
                         )
                     }
-                    Text(
-                        text = "Create tournaments & declare match winners",
-                        color = TextMuted,
-                        fontSize = 12.sp
-                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = GoldAccent,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Admin Studio",
+                                color = TextPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "Create tournaments & declare match winners",
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
 
                 Surface(
@@ -221,8 +242,19 @@ fun AdminScreen(
             }
         }
 
-        // Action Banner: Create Tournament Button
+        // Action Banner: Host / Publish Game Card with Publish Game & Cancel buttons
         item {
+            var inlineTitle by remember { mutableStateOf("") }
+            var inlineGame by remember { mutableStateOf("Free Fire MAX") }
+            var inlineMap by remember { mutableStateOf("Bermuda") }
+            var inlineFormat by remember { mutableStateOf("Squad") }
+            var inlineDate by remember { mutableStateOf("Today") }
+            var inlineTime by remember { mutableStateOf("09:00 PM") }
+            var inlineEntryFee by remember { mutableStateOf("50") }
+            var inlinePrizePool by remember { mutableStateOf("2500") }
+            var inlinePerKill by remember { mutableStateOf("10") }
+            var inlineSlots by remember { mutableStateOf("48") }
+
             Card(
                 modifier = Modifier.fillMaxWidth().testTag("admin_action_banner"),
                 shape = RoundedCornerShape(18.dp),
@@ -239,40 +271,203 @@ fun AdminScreen(
                         )
                         .padding(18.dp)
                 ) {
-                    Column {
-                        Text(
-                            text = "Host a New Tournament",
-                            color = TextPrimary,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Set game (Free Fire / BGMI), entry fee, prize pool, schedule, and publish live to Firestore.",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Button(
-                            onClick = { showCreateTournamentDialog = true },
-                            modifier = Modifier.fillMaxWidth().testTag("admin_create_tournament_btn"),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NeonCyan,
-                                contentColor = Color.Black
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Create New Tournament", fontWeight = FontWeight.Bold)
+                            Column {
+                                Text(
+                                    text = "Host a New Tournament",
+                                    color = TextPrimary,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Set match details and publish live to Firestore",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            TextButton(
+                                onClick = { showCreateTournamentDialog = true },
+                                modifier = Modifier.testTag("admin_create_tournament_btn")
+                            ) {
+                                Text("Open Dialog", color = NeonCyan, fontSize = 12.sp)
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = inlineTitle,
+                            onValueChange = { inlineTitle = it },
+                            label = { Text("Tournament Title") },
+                            placeholder = { Text("e.g. BGMI Championship S1") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("input_tournament_title"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = BorderMuted,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Free Fire MAX", "BGMI").forEach { game ->
+                                val isSelected = inlineGame == game
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            inlineGame = game
+                                            inlineMap = if (game == "BGMI") "Erangel" else "Bermuda"
+                                        },
+                                    color = if (isSelected) NeonCyan else CardNavyElevated,
+                                    border = BorderStroke(1.dp, if (isSelected) NeonCyan else BorderMuted),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = game,
+                                        color = if (isSelected) Color.Black else TextSecondary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = inlineEntryFee,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) inlineEntryFee = it },
+                                label = { Text("Entry Fee (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("input_entry_fee"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = BorderMuted,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = inlinePrizePool,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) inlinePrizePool = it },
+                                label = { Text("Prize Pool (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("input_prize_pool"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = BorderMuted,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = inlineTime,
+                                onValueChange = { inlineTime = it },
+                                label = { Text("Time (e.g. 09:00 PM)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("input_schedule_time"),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = BorderMuted,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = inlineMap,
+                                onValueChange = { inlineMap = it },
+                                label = { Text("Map") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = BorderMuted,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Publish Game and Cancel Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val finalTitle = inlineTitle.ifBlank { "$inlineGame Mega Contest" }
+                                    val entry = inlineEntryFee.toIntOrNull() ?: 50
+                                    val prize = inlinePrizePool.toIntOrNull() ?: 2500
+                                    val kill = inlinePerKill.toIntOrNull() ?: 10
+                                    val slots = inlineSlots.toIntOrNull() ?: 48
+                                    viewModel.createTournament(
+                                        title = finalTitle,
+                                        gameCategory = inlineGame,
+                                        map = inlineMap,
+                                        format = inlineFormat,
+                                        scheduleDate = inlineDate,
+                                        scheduleTime = inlineTime,
+                                        entryFee = entry,
+                                        prizePool = prize,
+                                        perKill = kill,
+                                        totalSlots = slots,
+                                        onSuccess = { onBack() }
+                                    )
+                                },
+                                enabled = !isAdminLoading,
+                                modifier = Modifier.weight(1f).testTag("admin_publish_game_btn"),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = NeonCyan,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                if (isAdminLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black)
+                                } else {
+                                    Text("Publish Game", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    inlineTitle = ""
+                                    inlineEntryFee = "50"
+                                    inlinePrizePool = "2500"
+                                    inlineTime = "09:00 PM"
+                                    onBack()
+                                },
+                                enabled = !isAdminLoading,
+                                modifier = Modifier.weight(1f).testTag("admin_cancel_btn"),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, BorderMuted),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+                            ) {
+                                Text("Cancel", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Section: Tournaments Management (Declare Winners)
+        // Section: Tournaments Management (Declare Winners & Update Stats)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -286,7 +481,7 @@ fun AdminScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Tap to declare winner",
+                    text = "Leaderboard & Results",
                     color = TextMuted,
                     fontSize = 11.sp
                 )
@@ -296,7 +491,8 @@ fun AdminScreen(
         items(tournaments, key = { it.id }) { tournament ->
             AdminTournamentManageCard(
                 tournament = tournament,
-                onDeclareWinnerClick = { tournamentToDeclareWinner = tournament }
+                onDeclareWinnerClick = { tournamentToDeclareWinner = tournament },
+                onManageStatsClick = { onNavigateToMatchDetails(tournament) }
             )
         }
     }
@@ -318,7 +514,10 @@ fun AdminScreen(
                     prizePool = prize,
                     perKill = perKill,
                     totalSlots = slots,
-                    onSuccess = { showCreateTournamentDialog = false }
+                    onSuccess = {
+                        showCreateTournamentDialog = false
+                        onBack()
+                    }
                 )
             }
         )
@@ -344,7 +543,8 @@ fun AdminScreen(
 @Composable
 fun AdminTournamentManageCard(
     tournament: Tournament,
-    onDeclareWinnerClick: () -> Unit
+    onDeclareWinnerClick: () -> Unit,
+    onManageStatsClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -437,6 +637,22 @@ fun AdminTournamentManageCard(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Declare Winner", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onManageStatsClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("admin_manage_stats_btn_${tournament.id}"),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, NeonCyan),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+            ) {
+                Icon(imageVector = Icons.Default.MilitaryTech, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Update Stats / Leaderboard", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
@@ -627,17 +843,26 @@ fun CreateTournamentDialog(
                 },
                 enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
-                modifier = Modifier.testTag("submit_create_tournament_btn")
+                modifier = Modifier.testTag("admin_publish_game_btn")
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black)
                 } else {
-                    Text("Publish to Firestore", fontWeight = FontWeight.Bold)
+                    Text("Publish Game", fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) {
+            TextButton(
+                onClick = {
+                    title = ""
+                    entryFeeStr = "50"
+                    prizePoolStr = "2500"
+                    onDismiss()
+                },
+                enabled = !isLoading,
+                modifier = Modifier.testTag("admin_cancel_btn")
+            ) {
                 Text("Cancel", color = TextSecondary)
             }
         },

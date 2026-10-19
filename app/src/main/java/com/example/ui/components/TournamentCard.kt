@@ -64,6 +64,7 @@ fun TournamentCard(
     tournament: Tournament,
     onJoinClick: () -> Unit,
     onDetailsClick: () -> Unit,
+    onViewResultsClick: () -> Unit = onDetailsClick,
     modifier: Modifier = Modifier
 ) {
     val categoryBadgeColor = when (tournament.gameCategory) {
@@ -82,7 +83,7 @@ fun TournamentCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("tournament_card_${tournament.id}")
-            .clickable { onDetailsClick() },
+            .clickable { onViewResultsClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardNavy),
         border = BorderStroke(1.dp, if (tournament.isJoined) BorderCyan else BorderMuted)
@@ -307,7 +308,7 @@ fun TournamentCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDetailsClick,
+                        onClick = onViewResultsClick,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("details_button_${tournament.id}"),
@@ -315,7 +316,7 @@ fun TournamentCard(
                         border = BorderStroke(1.dp, BorderCyan),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
                     ) {
-                        Text("Details", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("View Results", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     if (tournament.isJoined) {

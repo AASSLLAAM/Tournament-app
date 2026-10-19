@@ -4,8 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,8 +68,14 @@ import com.example.ui.theme.TextSecondary
 fun MyMatchesScreen(
     tournaments: List<Tournament>,
     onExploreTournaments: () -> Unit,
+    onNavigateToMatchDetails: (Tournament) -> Unit = {},
+    onBack: () -> Unit = onExploreTournaments,
     modifier: Modifier = Modifier
 ) {
+    BackHandler {
+        onBack()
+    }
+
     val joinedMatches = remember(tournaments) { tournaments.filter { it.isJoined } }
     val context = LocalContext.current
 
@@ -178,7 +186,8 @@ fun MyMatchesScreen(
                         val clip = ClipData.newPlainText("Room Details", "Room ID: $roomId, Password: $password")
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Room credentials copied to clipboard!", Toast.LENGTH_SHORT).show()
-                    }
+                    },
+                    onViewResults = { onNavigateToMatchDetails(match) }
                 )
             }
         }
@@ -188,7 +197,8 @@ fun MyMatchesScreen(
 @Composable
 fun JoinedMatchCard(
     match: Tournament,
-    onCopyCredentials: (String, String) -> Unit
+    onCopyCredentials: (String, String) -> Unit,
+    onViewResults: () -> Unit = {}
 ) {
     val bannerRes = if (match.bannerType == "bgmi" || match.gameCategory == GameCategory.BGMI) {
         R.drawable.img_banner_bgmi
@@ -199,7 +209,8 @@ fun JoinedMatchCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("joined_match_card_${match.id}"),
+            .testTag("joined_match_card_${match.id}")
+            .clickable { onViewResults() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardNavy),
         border = BorderStroke(1.dp, BorderCyan)
@@ -382,6 +393,22 @@ fun JoinedMatchCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onViewResults,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_view_results_${match.id}"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NeonCyan,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("View Results & Leaderboard", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }

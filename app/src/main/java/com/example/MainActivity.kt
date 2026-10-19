@@ -43,11 +43,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.EsportsRepository
+import com.example.model.Tournament
 import com.example.ui.navigation.NavScreen
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ErrorBoundaryScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.MatchDetailsScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.WalletScreen
@@ -328,6 +330,7 @@ fun MainAppContainer(
     onSignOut: () -> Unit
 ) {
     var currentScreen by remember { mutableStateOf(NavScreen.HOME) }
+    var selectedTournamentForDetails by remember { mutableStateOf<Tournament?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val walletBalance by viewModel.walletBalance.collectAsStateWithLifecycle()
@@ -337,7 +340,14 @@ fun MainAppContainer(
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
 
-    // Handle back button when on secondary screens
+    // Enforce security: if normal user is somehow on Admin screen, return to Home
+    LaunchedEffect(userProfile.isAdmin, currentScreen) {
+        if (currentScreen == NavScreen.ADMIN && !userProfile.isAdmin) {
+            currentScreen = NavScreen.HOME
+        }
+    }
+
+    // Physical back button handler when on secondary screens
     BackHandler(enabled = currentScreen != NavScreen.HOME) {
         currentScreen = NavScreen.HOME
     }
@@ -355,44 +365,52 @@ fun MainAppContainer(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .testTag("bottom_nav_bar"),
-                containerColor = CardNavy,
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                tonalElevation = 8.dp
-            ) {
-                NavScreen.entries.forEach { screen ->
-                    val isSelected = currentScreen == screen
-                    val activeColor = if (screen == NavScreen.ADMIN) GoldAccent else NeonCyan
+            if (currentScreen != NavScreen.MATCH_DETAILS) {
+                val visibleScreens = remember(userProfile.isAdmin) {
+                    NavScreen.entries.filter { screen ->
+                        screen.isBottomTab && (screen != NavScreen.ADMIN || userProfile.isAdmin)
+                    }
+                }
 
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { currentScreen = screen },
-                        modifier = Modifier.testTag(screen.testTag),
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) screen.selectedIcon else screen.unselectedIcon,
-                                contentDescription = screen.title
+                NavigationBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .testTag("bottom_nav_bar"),
+                    containerColor = CardNavy,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    tonalElevation = 8.dp
+                ) {
+                    visibleScreens.forEach { screen ->
+                        val isSelected = currentScreen == screen
+                        val activeColor = if (screen == NavScreen.ADMIN) GoldAccent else NeonCyan
+
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = { currentScreen = screen },
+                            modifier = Modifier.testTag(screen.testTag),
+                            icon = {
+                                Icon(
+                                    imageVector = if (isSelected) screen.selectedIcon else screen.unselectedIcon,
+                                    contentDescription = screen.title
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = screen.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.Black,
+                                selectedTextColor = activeColor,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextMuted,
+                                indicatorColor = activeColor
                             )
-                        },
-                        label = {
-                            Text(
-                                text = screen.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = activeColor,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextMuted,
-                            indicatorColor = activeColor
                         )
-                    )
+                    }
                 }
             }
         }
@@ -405,6 +423,10 @@ fun MainAppContainer(
                     walletBalance = walletBalance,
                     selectedCategory = selectedCategory,
                     onNavigateToWallet = { currentScreen = NavScreen.WALLET },
+                    onNavigateToMatchDetails = { tournament ->
+                        selectedTournamentForDetails = tournament
+                        currentScreen = NavScreen.MATCH_DETAILS
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -425,6 +447,11 @@ fun MainAppContainer(
                 MyMatchesScreen(
                     tournaments = tournaments,
                     onExploreTournaments = { currentScreen = NavScreen.HOME },
+                    onNavigateToMatchDetails = { tournament ->
+                        selectedTournamentForDetails = tournament
+                        currentScreen = NavScreen.MATCH_DETAILS
+                    },
+                    onBack = { currentScreen = NavScreen.HOME },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -448,10 +475,30 @@ fun MainAppContainer(
                     userProfile = userProfile,
                     tournaments = tournaments,
                     onBack = { currentScreen = NavScreen.HOME },
+                    onNavigateToMatchDetails = { tournament ->
+                        selectedTournamentForDetails = tournament
+                        currentScreen = NavScreen.MATCH_DETAILS
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 )
+            }
+            NavScreen.MATCH_DETAILS -> {
+                val currentTour = selectedTournamentForDetails ?: tournaments.firstOrNull()
+                if (currentTour != null) {
+                    MatchDetailsScreen(
+                        tournament = currentTour,
+                        viewModel = viewModel,
+                        userProfile = userProfile,
+                        onBack = { currentScreen = NavScreen.HOME },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    )
+                } else {
+                    currentScreen = NavScreen.HOME
+                }
             }
         }
     }

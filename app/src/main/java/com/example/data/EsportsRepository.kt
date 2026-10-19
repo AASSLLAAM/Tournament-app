@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import android.util.Log
 import com.example.R
+import com.example.model.MatchResult
 import com.example.model.Tournament
 import com.example.model.UserProfile
 import com.example.model.UserRegistration
@@ -281,6 +282,139 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.LIST, path)
             emit(emptyList())
+        }
+    }
+
+    // In-memory cache for match results (used for guest mode and offline preview)
+    private val localMatchResults = mutableMapOf<String, MutableStateFlow<List<MatchResult>>>()
+
+    fun getDefaultMatchResults(tournamentId: String): List<MatchResult> {
+        return listOf(
+            MatchResult(
+                id = "${tournamentId}_res_1",
+                tournamentId = tournamentId,
+                rank = 1,
+                teamName = "Team Soul",
+                playerName = "Soul_Mortal",
+                kills = 14,
+                points = 29,
+                prizeWon = 1200
+            ),
+            MatchResult(
+                id = "${tournamentId}_res_2",
+                tournamentId = tournamentId,
+                rank = 2,
+                teamName = "GodLike Esports",
+                playerName = "GodL_Jonathan",
+                kills = 11,
+                points = 23,
+                prizeWon = 700
+            ),
+            MatchResult(
+                id = "${tournamentId}_res_3",
+                tournamentId = tournamentId,
+                rank = 3,
+                teamName = "Total Gaming",
+                playerName = "TG_Ajjubhai",
+                kills = 8,
+                points = 18,
+                prizeWon = 400
+            ),
+            MatchResult(
+                id = "${tournamentId}_res_4",
+                tournamentId = tournamentId,
+                rank = 4,
+                teamName = "Blind Esports",
+                playerName = "Blind_Spower",
+                kills = 6,
+                points = 14,
+                prizeWon = 200
+            ),
+            MatchResult(
+                id = "${tournamentId}_res_5",
+                tournamentId = tournamentId,
+                rank = 5,
+                teamName = "Revenant X",
+                playerName = "RNT_Sensei",
+                kills = 4,
+                points = 10,
+                prizeWon = 0
+            )
+        )
+    }
+
+    // 5. Observe Match Leaderboard / Results from tournaments/{tournamentId}/results
+    fun observeMatchResults(tournamentId: String): Flow<List<MatchResult>> = flow {
+        val defaultList = getDefaultMatchResults(tournamentId)
+        if (isGuest()) {
+            val flow = localMatchResults.getOrPut(tournamentId) { MutableStateFlow(defaultList) }
+            emitAll(flow)
+            return@flow
+        }
+        val path = "tournaments/$tournamentId/results"
+        try {
+            emitAll(
+                db.collection("tournaments").document(tournamentId).collection("results")
+                    .snapshots()
+                    .map { snapshot ->
+                        val results = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                doc.toObject(MatchResult::class.java)?.copy(id = doc.id)
+                            } catch (_: Throwable) {
+                                null
+                            }
+                        }.sortedBy { it.rank }
+
+                        if (results.isEmpty()) defaultList else results
+                    }
+                    .catch { error ->
+                        Log.w(TAG, "observeMatchResults fallback: ${error.message}")
+                        emit(defaultList)
+                    }
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "observeMatchResults catch fallback: ${e.message}")
+            emit(defaultList)
+        }
+    }
+
+    // Admin: Add or update Match Result / Leaderboard entry
+    suspend fun saveMatchResult(tournamentId: String, matchResult: MatchResult): Result<Unit> {
+        val resultId = matchResult.id.ifBlank { "res_${System.currentTimeMillis() % 100000}" }
+        val toSave = matchResult.copy(id = resultId, tournamentId = tournamentId)
+
+        if (isGuest()) {
+            val flow = localMatchResults.getOrPut(tournamentId) { MutableStateFlow(getDefaultMatchResults(tournamentId)) }
+            val current = flow.value.filter { it.id != resultId && it.rank != toSave.rank }
+            val updated = (current + toSave).sortedBy { it.rank }
+            flow.value = updated
+            return Result.success(Unit)
+        }
+
+        return try {
+            val map = mapOf(
+                "id" to resultId,
+                "tournamentId" to tournamentId,
+                "rank" to toSave.rank,
+                "teamName" to toSave.teamName,
+                "playerName" to toSave.playerName,
+                "kills" to toSave.kills,
+                "points" to toSave.points,
+                "prizeWon" to toSave.prizeWon
+            )
+            db.collection("tournaments").document(tournamentId)
+                .collection("results").document(resultId)
+                .set(map).await()
+
+            // Update local in-memory cache as well
+            val flow = localMatchResults.getOrPut(tournamentId) { MutableStateFlow(getDefaultMatchResults(tournamentId)) }
+            val current = flow.value.filter { it.id != resultId && it.rank != toSave.rank }
+            flow.value = (current + toSave).sortedBy { it.rank }
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.WRITE, "tournaments/$tournamentId/results/$resultId")
+            Result.failure(e)
         }
     }
 
