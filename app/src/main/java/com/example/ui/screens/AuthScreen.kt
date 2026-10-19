@@ -140,19 +140,35 @@ fun AuthScreen(
                 onAuthSuccess()
             } catch (e: Throwable) {
                 isLoading = false
-                val rawMsg = e.localizedMessage ?: "Authentication failed."
+                val rawMsg = e.localizedMessage ?: e.message ?: "Authentication failed."
                 errorMessage = when {
+                    e is com.google.firebase.auth.FirebaseAuthUserCollisionException ||
+                    rawMsg.contains("already in use", ignoreCase = true) ||
+                    rawMsg.contains("already exists", ignoreCase = true) ||
+                    rawMsg.contains("email-already-in-use", ignoreCase = true) ->
+                        "An account with this email already exists. Tap below to Sign In."
+                    e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ||
                     rawMsg.contains("invalid-credential", ignoreCase = true) ||
                     rawMsg.contains("wrong password", ignoreCase = true) ||
-                    rawMsg.contains("invalid-email", ignoreCase = true) -> "Invalid email or password."
+                    rawMsg.contains("invalid password", ignoreCase = true) ||
+                    rawMsg.contains("invalid-email", ignoreCase = true) ||
+                    rawMsg.contains("invalid email", ignoreCase = true) ->
+                        "Invalid email or password."
+                    e is com.google.firebase.auth.FirebaseAuthInvalidUserException ||
                     rawMsg.contains("user-not-found", ignoreCase = true) ||
-                    rawMsg.contains("no user record", ignoreCase = true) -> "No account found. Tap 'Create Account' above."
-                    rawMsg.contains("email-already-in-use", ignoreCase = true) -> "An account with this email already exists."
-                    rawMsg.contains("weak-password", ignoreCase = true) -> "Password is too weak. Please use at least 6 characters."
-                    rawMsg.contains("too-many-requests", ignoreCase = true) -> "Too many attempts. Please try again later."
-                    rawMsg.contains("network", ignoreCase = true) -> "Network connection issue. Tap 'Continue as Guest' below to explore."
+                    rawMsg.contains("no user record", ignoreCase = true) ->
+                        "No account found with this email. Tap 'Create Account' above."
+                    e is com.google.firebase.auth.FirebaseAuthWeakPasswordException ||
+                    rawMsg.contains("weak-password", ignoreCase = true) ->
+                        "Password is too weak. Please use at least 6 characters."
+                    rawMsg.contains("too-many-requests", ignoreCase = true) ->
+                        "Too many attempts. Please try again later."
+                    e is com.google.firebase.FirebaseNetworkException ||
+                    rawMsg.contains("network", ignoreCase = true) ->
+                        "Network connection issue. Tap 'Continue as Guest' below to explore."
                     rawMsg.contains("API key", ignoreCase = true) ||
-                    rawMsg.contains("internal error", ignoreCase = true) -> "Cloud service unavailable. Tap 'Continue as Guest' below."
+                    rawMsg.contains("internal error", ignoreCase = true) ->
+                        "Cloud service unavailable. Tap 'Continue as Guest' below."
                     else -> rawMsg
                 }
             }
@@ -420,6 +436,35 @@ fun AuthScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
+                    if (isSignUpMode && errorMessage!!.contains("already exists", ignoreCase = true)) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Tap here to switch to Sign In",
+                            color = NeonCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable {
+                                    isSignUpMode = false
+                                    errorMessage = null
+                                }
+                                .padding(4.dp)
+                        )
+                    } else if (!isSignUpMode && errorMessage!!.contains("No account found", ignoreCase = true)) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Tap here to switch to Create Account",
+                            color = NeonCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable {
+                                    isSignUpMode = true
+                                    errorMessage = null
+                                }
+                                .padding(4.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

@@ -16,6 +16,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -23,6 +24,63 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 private const val TAG = "EsportsRepository"
+
+val DEFAULT_TOURNAMENTS = listOf(
+    Tournament(
+        id = "tour_ff_01",
+        title = "Free Fire Pro Scrims Season 4",
+        gameCategoryName = "FREE_FIRE",
+        map = "Bermuda",
+        formatName = "SQUAD",
+        scheduleTime = "06:30 PM",
+        scheduleDate = "Today",
+        entryFee = 50,
+        prizePool = 2500,
+        perKill = 10,
+        totalSlots = 48,
+        filledSlots = 24,
+        bannerType = "ff",
+        serverType = "Asia / TPP",
+        organizer = "WorldWar Official",
+        statusText = "Open"
+    ),
+    Tournament(
+        id = "tour_bgmi_01",
+        title = "BGMI Masters Mega Showdown",
+        gameCategoryName = "BGMI",
+        map = "Erangel",
+        formatName = "SQUAD",
+        scheduleTime = "08:00 PM",
+        scheduleDate = "Today",
+        entryFee = 100,
+        prizePool = 5000,
+        perKill = 20,
+        totalSlots = 100,
+        filledSlots = 52,
+        bannerType = "bgmi",
+        serverType = "Asia / TPP",
+        organizer = "WorldWar Official",
+        statusText = "Open"
+    ),
+    Tournament(
+        id = "tour_ff_02",
+        title = "Free Fire Solo Headshot Championship",
+        gameCategoryName = "FREE_FIRE",
+        map = "Purgatory",
+        formatName = "SOLO",
+        scheduleTime = "09:15 PM",
+        scheduleDate = "Today",
+        entryFee = 30,
+        prizePool = 1500,
+        perKill = 15,
+        totalSlots = 48,
+        filledSlots = 18,
+        bannerType = "ff",
+        serverType = "Asia / TPP",
+        organizer = "WorldWar Official",
+        statusText = "Open"
+    )
+)
 
 class EsportsRepository(private val db: FirebaseFirestore) {
 
@@ -52,6 +110,43 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             null
         }
 
+    fun isGuest(): Boolean {
+        return try {
+            auth?.currentUser == null || requireUserId() == "player_guest"
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
+    private val guestProfileFlow = MutableStateFlow(
+        UserProfile(
+            userId = "player_guest",
+            username = "GuestPlayer",
+            ingameId = "WW-GUEST",
+            email = "guest@worldwar.com",
+            role = "player",
+            level = 1,
+            tier = "PRO WARRIOR",
+            walletBalance = 500
+        )
+    )
+
+    private val guestRegistrationsFlow = MutableStateFlow<List<UserRegistration>>(emptyList())
+
+    private val guestTransactionsFlow = MutableStateFlow<List<WalletTransaction>>(
+        listOf(
+            WalletTransaction(
+                id = "tx_guest_welcome",
+                userId = "player_guest",
+                title = "Welcome Bonus (Guest)",
+                amount = 500,
+                isCredit = true,
+                date = "Today",
+                status = "Success"
+            )
+        )
+    )
+
     fun requireUserId(): String {
         return try {
             auth?.currentUser?.uid ?: "player_guest"
@@ -68,27 +163,32 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 db.collection(path)
                     .snapshots()
                     .map { snapshot ->
-                        snapshot.documents.mapNotNull { doc ->
+                        val list = snapshot.documents.mapNotNull { doc ->
                             try {
                                 doc.toObject(Tournament::class.java)?.copy(id = doc.id)
                             } catch (_: Throwable) {
                                 null
                             }
                         }
+                        if (list.isEmpty()) DEFAULT_TOURNAMENTS else list
                     }
                     .catch { error ->
-                        handleFirestoreError(error, OperationType.LIST, path)
-                        emit(emptyList())
+                        Log.w(TAG, "observeTournaments stream warning: ${error.message}")
+                        emit(DEFAULT_TOURNAMENTS)
                     }
             )
         } catch (e: Throwable) {
-            handleFirestoreError(e, OperationType.LIST, path)
-            emit(emptyList())
+            Log.w(TAG, "observeTournaments catch: ${e.message}")
+            emit(DEFAULT_TOURNAMENTS)
         }
     }
 
     // 2. Observe user's joined tournament registrations
     fun observeUserRegistrations(): Flow<List<UserRegistration>> = flow {
+        if (isGuest()) {
+            emitAll(guestRegistrationsFlow)
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid/registrations"
         try {
@@ -117,6 +217,10 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // 3. Observe user profile (including wallet balance and admin role)
     fun observeUserProfile(): Flow<UserProfile?> = flow {
+        if (isGuest()) {
+            emitAll(guestProfileFlow)
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid"
         try {
@@ -150,6 +254,10 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // 4. Observe user transactions
     fun observeTransactions(): Flow<List<WalletTransaction>> = flow {
+        if (isGuest()) {
+            emitAll(guestTransactionsFlow)
+            return@flow
+        }
         val uid = requireUserId()
         val path = "users/$uid/transactions"
         try {
@@ -269,6 +377,9 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Ensure user profile document exists with role
     suspend fun ensureUserProfileExists(userEmail: String?, displayName: String?): UserProfile {
+        if (isGuest()) {
+            return guestProfileFlow.value
+        }
         val uid = requireUserId()
         val defaultProfile = UserProfile(
             userId = uid,
@@ -384,6 +495,11 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Toggle admin role for testing convenience
     suspend fun toggleAdminRole(enable: Boolean): Result<Unit> {
+        if (isGuest()) {
+            val current = guestProfileFlow.value
+            guestProfileFlow.value = current.copy(role = if (enable) "admin" else "player")
+            return Result.success(Unit)
+        }
         val uid = requireUserId()
         return try {
             val userDocRef = db.collection("users").document(uid)
@@ -467,6 +583,23 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Add money to wallet
     suspend fun addMoney(amount: Int): Result<Unit> {
+        if (isGuest()) {
+            val current = guestProfileFlow.value
+            val newBalance = current.walletBalance + amount
+            guestProfileFlow.value = current.copy(walletBalance = newBalance)
+            val txId = "tx_guest_dep_${System.currentTimeMillis() % 100000}"
+            val newTx = WalletTransaction(
+                id = txId,
+                userId = "player_guest",
+                title = "Deposit (Guest UPI/Card)",
+                amount = amount,
+                isCredit = true,
+                date = "Just now",
+                status = "Success"
+            )
+            guestTransactionsFlow.value = listOf(newTx) + guestTransactionsFlow.value
+            return Result.success(Unit)
+        }
         val uid = requireUserId()
         return try {
             val userDocRef = db.collection("users").document(uid)
@@ -498,6 +631,25 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Add money after successful Razorpay Payment
     suspend fun addMoneyFromRazorpay(amount: Int, paymentId: String): Result<Unit> {
+        if (isGuest()) {
+            val current = guestProfileFlow.value
+            val newBalance = current.walletBalance + amount
+            guestProfileFlow.value = current.copy(walletBalance = newBalance)
+            val cleanId = paymentId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val txId = "tx_rzp_${cleanId.take(40)}"
+            val newTx = WalletTransaction(
+                id = txId,
+                userId = "player_guest",
+                title = "Razorpay Deposit (Test Mode)",
+                amount = amount,
+                isCredit = true,
+                date = "Just now",
+                status = "Success",
+                paymentId = paymentId
+            )
+            guestTransactionsFlow.value = listOf(newTx) + guestTransactionsFlow.value
+            return Result.success(Unit)
+        }
         val uid = requireUserId()
         return try {
             val userDocRef = db.collection("users").document(uid)
@@ -532,11 +684,33 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Withdraw money from wallet to UPI or Bank
     suspend fun withdrawMoney(amount: Int, destination: String, method: String = "UPI"): Result<String> {
+        if (amount <= 0) {
+            return Result.failure(IllegalArgumentException("Withdrawal amount must be greater than zero."))
+        }
+        if (isGuest()) {
+            val current = guestProfileFlow.value
+            if (current.walletBalance < amount) {
+                return Result.failure(IllegalStateException("Insufficient balance! Available: ₹${current.walletBalance}, Requested: ₹$amount"))
+            }
+            val newBalance = current.walletBalance - amount
+            guestProfileFlow.value = current.copy(walletBalance = newBalance)
+            val txId = "tx_guest_wd_${System.currentTimeMillis() % 100000}"
+            val cleanDest = destination.trim().take(40)
+            val newTx = WalletTransaction(
+                id = txId,
+                userId = "player_guest",
+                title = "Withdrawal ($method: $cleanDest)",
+                amount = amount,
+                isCredit = false,
+                date = "Just now",
+                status = "Success",
+                paymentId = txId
+            )
+            guestTransactionsFlow.value = listOf(newTx) + guestTransactionsFlow.value
+            return Result.success(txId)
+        }
         val uid = requireUserId()
         return try {
-            if (amount <= 0) {
-                return Result.failure(IllegalArgumentException("Withdrawal amount must be greater than zero."))
-            }
             val userDocRef = db.collection("users").document(uid)
             val snapshot = userDocRef.get().await()
             val currentBalance = (snapshot.getLong("walletBalance") ?: 0L).toInt()
@@ -573,6 +747,49 @@ class EsportsRepository(private val db: FirebaseFirestore) {
 
     // Join Tournament
     suspend fun joinTournament(tournament: Tournament): Result<String> {
+        if (isGuest()) {
+            val alreadyJoined = guestRegistrationsFlow.value.any { it.tournamentId == tournament.id }
+            if (alreadyJoined) {
+                return Result.failure(IllegalStateException("You have already joined this tournament!"))
+            }
+            val current = guestProfileFlow.value
+            if (current.walletBalance < tournament.entryFee) {
+                return Result.failure(IllegalStateException("Insufficient balance! You need ₹${tournament.entryFee - current.walletBalance} more."))
+            }
+            val newBalance = current.walletBalance - tournament.entryFee
+            val currentMatches = current.matchesPlayed
+            guestProfileFlow.value = current.copy(
+                walletBalance = newBalance,
+                matchesPlayed = currentMatches + 1
+            )
+            val roomId = "ROOM-${(1000..9999).random()}"
+            val roomPassword = "${(100..999).random()}"
+            val newReg = UserRegistration(
+                registrationId = tournament.id,
+                tournamentId = tournament.id,
+                tournamentTitle = tournament.title,
+                userId = "player_guest",
+                entryFee = tournament.entryFee,
+                roomId = roomId,
+                roomPassword = roomPassword,
+                slotNumber = tournament.filledSlots + 1
+            )
+            guestRegistrationsFlow.value = listOf(newReg) + guestRegistrationsFlow.value
+            if (tournament.entryFee > 0) {
+                val txId = "tx_fee_${System.currentTimeMillis() % 100000}"
+                val newTx = WalletTransaction(
+                    id = txId,
+                    userId = "player_guest",
+                    title = "Entry Fee: ${tournament.title}",
+                    amount = tournament.entryFee,
+                    isCredit = false,
+                    date = "Just now",
+                    status = "Success"
+                )
+                guestTransactionsFlow.value = listOf(newTx) + guestTransactionsFlow.value
+            }
+            return Result.success("Joined ${tournament.title}! Room ID: $roomId, Pass: $roomPassword")
+        }
         val uid = requireUserId()
         val userDocRef = db.collection("users").document(uid)
         val tourDocRef = db.collection("tournaments").document(tournament.id)
