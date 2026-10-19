@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "993073891409",
+    "project_id": "worldwar-esports-d5643",
+    "storage_bucket": "worldwar-esports-d5643.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:993073891409:android:928fe0bd6942e31cb81070",
+        "android_client_info": {
+          "package_name": "com.aistudio.worldwar.kxmg"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "993073891409-m2iij1ra37c1npq5bj6phkir1h5sq58v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2WDQUorGy6vkhWK_QTc-JRi2rw9pxwwg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "993073891409-m2iij1ra37c1npq5bj6phkir1h5sq58v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
