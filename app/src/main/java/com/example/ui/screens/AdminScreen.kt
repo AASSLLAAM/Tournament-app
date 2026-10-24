@@ -51,6 +51,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import android.widget.Toast
+import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -102,8 +103,7 @@ fun AdminScreen(
 
     var showCreateTournamentDialog by remember { mutableStateOf(false) }
     var tournamentToDeclareWinner by remember { mutableStateOf<Tournament?>(null) }
-    var isPublishingInline by remember { mutableStateOf(false) }
-    var isPublishingDialog by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Physical back button handler: close open dialogs first
     BackHandler(enabled = showCreateTournamentDialog || tournamentToDeclareWinner != null) {
@@ -424,8 +424,20 @@ fun AdminScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    if (isPublishingInline) return@Button
-                                    isPublishingInline = true
+                                    if (isLoading) return@Button
+
+                                    val currentUser = try {
+                                        FirebaseAuth.getInstance().currentUser
+                                    } catch (_: Throwable) {
+                                        null
+                                    }
+                                    if (currentUser == null) {
+                                        isLoading = false
+                                        Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+
+                                    isLoading = true
                                     val finalTitle = inlineTitle.ifBlank { "$inlineGame Mega Contest" }
                                     val entry = inlineEntryFee.toIntOrNull() ?: 50
                                     val prize = inlinePrizePool.toIntOrNull() ?: 2500
@@ -449,18 +461,23 @@ fun AdminScreen(
                                                 Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
                                                 onBack()
                                             } else {
-                                                val errorMsg = result.exceptionOrNull()?.message ?: "Failed to publish tournament"
-                                                Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                                val errorMsg = result.exceptionOrNull()?.localizedMessage
+                                                    ?: result.exceptionOrNull()?.message
+                                                    ?: "Failed to publish tournament"
+                                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                                             }
-                                        } catch (e: Throwable) {
-                                            val errorMsg = e.message ?: "Failed to publish tournament"
-                                            Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            val errorMsg = e.localizedMessage ?: e.message ?: "Failed to publish tournament"
+                                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                        } catch (t: Throwable) {
+                                            val errorMsg = t.localizedMessage ?: t.message ?: "Failed to publish tournament"
+                                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                                         } finally {
-                                            isPublishingInline = false
+                                            isLoading = false
                                         }
                                     }
                                 },
-                                enabled = !isPublishingInline && !isAdminLoading,
+                                enabled = !isLoading && !isAdminLoading,
                                 modifier = Modifier.weight(1f).testTag("admin_publish_game_btn"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -468,7 +485,7 @@ fun AdminScreen(
                                     contentColor = Color.Black
                                 )
                             ) {
-                                if (isPublishingInline || isAdminLoading) {
+                                if (isLoading || isAdminLoading) {
                                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
                                 } else {
                                     Text("Publish Game", fontWeight = FontWeight.Bold)
@@ -530,15 +547,27 @@ fun AdminScreen(
     // Dialog: Create Tournament
     if (showCreateTournamentDialog) {
         CreateTournamentDialog(
-            isLoading = isPublishingDialog || isAdminLoading,
+            isLoading = isLoading || isAdminLoading,
             onDismiss = {
-                if (!isPublishingDialog) {
+                if (!isLoading) {
                     showCreateTournamentDialog = false
                 }
             },
             onSubmit = { title, game, map, format, date, time, entryFee, prize, perKill, slots ->
-                if (isPublishingDialog) return@CreateTournamentDialog
-                isPublishingDialog = true
+                if (isLoading) return@CreateTournamentDialog
+
+                val currentUser = try {
+                    FirebaseAuth.getInstance().currentUser
+                } catch (_: Throwable) {
+                    null
+                }
+                if (currentUser == null) {
+                    isLoading = false
+                    Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
+                    return@CreateTournamentDialog
+                }
+
+                isLoading = true
                 coroutineScope.launch {
                     try {
                         val result = viewModel.createTournamentAsync(
@@ -558,14 +587,19 @@ fun AdminScreen(
                             showCreateTournamentDialog = false
                             onBack()
                         } else {
-                            val errorMsg = result.exceptionOrNull()?.message ?: "Failed to publish tournament"
-                            Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                            val errorMsg = result.exceptionOrNull()?.localizedMessage
+                                ?: result.exceptionOrNull()?.message
+                                ?: "Failed to publish tournament"
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                         }
-                    } catch (e: Throwable) {
-                        val errorMsg = e.message ?: "Failed to publish tournament"
-                        Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        val errorMsg = e.localizedMessage ?: e.message ?: "Failed to publish tournament"
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                    } catch (t: Throwable) {
+                        val errorMsg = t.localizedMessage ?: t.message ?: "Failed to publish tournament"
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                     } finally {
-                        isPublishingDialog = false
+                        isLoading = false
                     }
                 }
             }

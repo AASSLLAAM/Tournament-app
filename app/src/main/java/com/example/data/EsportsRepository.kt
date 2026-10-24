@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 
 private const val TAG = "EsportsRepository"
 
@@ -672,6 +674,15 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         perKill: Int,
         totalSlots: Int
     ): Result<String> {
+        val currentUser = try {
+            auth?.currentUser
+        } catch (_: Throwable) {
+            null
+        }
+        if (currentUser == null && !isGuest()) {
+            return Result.failure(IllegalStateException("User not logged in"))
+        }
+
         return try {
             val tourId = "tour_${System.currentTimeMillis() % 100000}"
             val banner = if (gameCategory.contains("BGMI", ignoreCase = true)) "bgmi" else "ff"
@@ -695,8 +706,14 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 "statusText" to "Open"
             )
 
-            db.collection("tournaments").document(tourId).set(tourMap).await()
+            withTimeout(8000L) {
+                db.collection("tournaments").document(tourId).set(tourMap).await()
+            }
             Result.success(tourId)
+        } catch (e: TimeoutCancellationException) {
+            val timeoutError = Exception("Network timeout: Firebase is offline or taking too long. Please check your connection.", e)
+            handleFirestoreError(timeoutError, OperationType.CREATE, "tournaments")
+            Result.failure(timeoutError)
         } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.CREATE, "tournaments")
             Result.failure(e)

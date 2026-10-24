@@ -75,6 +75,7 @@ data class UserProfile(
     val username: String = "WorldPlayer",
     val ingameId: String = "WW-1001",
     val email: String = "",
+    val phoneNumber: String = "",
     val role: String = "player", // "admin" or "player"
     val level: Int = 5,
     val tier: String = "PRO WARRIOR",
