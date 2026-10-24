@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,8 +76,12 @@ fun ProfileScreen(
     onNavigateToWallet: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onSignOut: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    BackHandler {
+        onBack()
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val firebaseUser = Firebase.auth.currentUser
@@ -230,58 +235,67 @@ fun ProfileScreen(
             }
         }
 
-        // Admin Access Quick Panel (if admin or switch toggle)
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().testTag("profile_admin_role_card"),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = CardNavy),
-                border = BorderStroke(1.dp, if (userProfile.isAdmin) GoldAccent.copy(alpha = 0.6f) else BorderMuted)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(GoldAccent.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
+        // Admin Access Quick Panel (ONLY visible when logged-in user is admin)
+        if (userProfile.isAdmin) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("profile_admin_role_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardNavy),
+                    border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.6f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f, fill = false),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.AdminPanelSettings,
-                                    contentDescription = null,
-                                    tint = GoldAccent,
-                                    modifier = Modifier.size(22.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(GoldAccent.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AdminPanelSettings,
+                                        contentDescription = null,
+                                        tint = GoldAccent,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Admin Studio Access", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "Authorized Admin Active",
+                                        color = GoldAccent,
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("Admin Role Access", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = GoldAccent.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, GoldAccent)
+                            ) {
                                 Text(
-                                    text = if (userProfile.isAdmin) "Admin privileges active" else "Player mode",
-                                    color = if (userProfile.isAdmin) GoldAccent else TextMuted,
-                                    fontSize = 12.sp
+                                    text = "ADMIN",
+                                    color = GoldAccent,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
 
-                        Switch(
-                            checked = userProfile.isAdmin,
-                            onCheckedChange = { enable -> viewModel.setAdminRole(enable) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
-                                checkedTrackColor = GoldAccent
-                            ),
-                            modifier = Modifier.testTag("admin_role_switch")
-                        )
-                    }
-
-                    if (userProfile.isAdmin) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = onNavigateToAdmin,

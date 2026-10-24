@@ -50,19 +50,23 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.widget.Toast
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -93,16 +97,27 @@ fun AdminScreen(
     onNavigateToMatchDetails: (Tournament) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Physical back button handler works properly on Admin screen
-    BackHandler {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var showCreateTournamentDialog by remember { mutableStateOf(false) }
+    var tournamentToDeclareWinner by remember { mutableStateOf<Tournament?>(null) }
+    var isPublishingInline by remember { mutableStateOf(false) }
+    var isPublishingDialog by remember { mutableStateOf(false) }
+
+    // Physical back button handler: close open dialogs first
+    BackHandler(enabled = showCreateTournamentDialog || tournamentToDeclareWinner != null) {
+        showCreateTournamentDialog = false
+        tournamentToDeclareWinner = null
+    }
+
+    // Physical back button handler: return to previous screen
+    BackHandler(enabled = !showCreateTournamentDialog && tournamentToDeclareWinner == null) {
         onBack()
     }
 
     val isAdmin = userProfile.isAdmin
     val isAdminLoading by viewModel.isAdminActionLoading.collectAsState()
-
-    var showCreateTournamentDialog by remember { mutableStateOf(false) }
-    var tournamentToDeclareWinner by remember { mutableStateOf<Tournament?>(null) }
 
     if (!isAdmin) {
         // Access Denied Screen for Non-Admins
@@ -153,20 +168,13 @@ fun AdminScreen(
                     )
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Developer/Tester Toggle for Admin Access
-                    OutlinedButton(
-                        onClick = { viewModel.setAdminRole(true) },
+                    Button(
+                        onClick = onBack,
                         shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, NeonCyan),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
-                        modifier = Modifier.testTag("request_admin_role_btn")
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
+                        modifier = Modifier.fillMaxWidth().testTag("return_home_btn")
                     ) {
-                        Text("Switch to Admin Role (Dev Mode)", fontWeight = FontWeight.Bold)
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    TextButton(onClick = onBack) {
-                        Text("Return to Home", color = TextMuted)
+                        Text("Return to Home", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -190,7 +198,10 @@ fun AdminScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(
                         onClick = onBack,
                         modifier = Modifier.testTag("admin_back_btn")
@@ -225,6 +236,8 @@ fun AdminScreen(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -411,26 +424,43 @@ fun AdminScreen(
                         ) {
                             Button(
                                 onClick = {
+                                    if (isPublishingInline) return@Button
+                                    isPublishingInline = true
                                     val finalTitle = inlineTitle.ifBlank { "$inlineGame Mega Contest" }
                                     val entry = inlineEntryFee.toIntOrNull() ?: 50
                                     val prize = inlinePrizePool.toIntOrNull() ?: 2500
                                     val kill = inlinePerKill.toIntOrNull() ?: 10
                                     val slots = inlineSlots.toIntOrNull() ?: 48
-                                    viewModel.createTournament(
-                                        title = finalTitle,
-                                        gameCategory = inlineGame,
-                                        map = inlineMap,
-                                        format = inlineFormat,
-                                        scheduleDate = inlineDate,
-                                        scheduleTime = inlineTime,
-                                        entryFee = entry,
-                                        prizePool = prize,
-                                        perKill = kill,
-                                        totalSlots = slots,
-                                        onSuccess = { onBack() }
-                                    )
+                                    coroutineScope.launch {
+                                        try {
+                                            val result = viewModel.createTournamentAsync(
+                                                title = finalTitle,
+                                                gameCategory = inlineGame,
+                                                map = inlineMap,
+                                                format = inlineFormat,
+                                                scheduleDate = inlineDate,
+                                                scheduleTime = inlineTime,
+                                                entryFee = entry,
+                                                prizePool = prize,
+                                                perKill = kill,
+                                                totalSlots = slots
+                                            )
+                                            if (result.isSuccess) {
+                                                Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
+                                                onBack()
+                                            } else {
+                                                val errorMsg = result.exceptionOrNull()?.message ?: "Failed to publish tournament"
+                                                Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                            }
+                                        } catch (e: Throwable) {
+                                            val errorMsg = e.message ?: "Failed to publish tournament"
+                                            Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isPublishingInline = false
+                                        }
+                                    }
                                 },
-                                enabled = !isAdminLoading,
+                                enabled = !isPublishingInline && !isAdminLoading,
                                 modifier = Modifier.weight(1f).testTag("admin_publish_game_btn"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -438,8 +468,8 @@ fun AdminScreen(
                                     contentColor = Color.Black
                                 )
                             ) {
-                                if (isAdminLoading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black)
+                                if (isPublishingInline || isAdminLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
                                 } else {
                                     Text("Publish Game", fontWeight = FontWeight.Bold)
                                 }
@@ -500,25 +530,44 @@ fun AdminScreen(
     // Dialog: Create Tournament
     if (showCreateTournamentDialog) {
         CreateTournamentDialog(
-            isLoading = isAdminLoading,
-            onDismiss = { showCreateTournamentDialog = false },
+            isLoading = isPublishingDialog || isAdminLoading,
+            onDismiss = {
+                if (!isPublishingDialog) {
+                    showCreateTournamentDialog = false
+                }
+            },
             onSubmit = { title, game, map, format, date, time, entryFee, prize, perKill, slots ->
-                viewModel.createTournament(
-                    title = title,
-                    gameCategory = game,
-                    map = map,
-                    format = format,
-                    scheduleDate = date,
-                    scheduleTime = time,
-                    entryFee = entryFee,
-                    prizePool = prize,
-                    perKill = perKill,
-                    totalSlots = slots,
-                    onSuccess = {
-                        showCreateTournamentDialog = false
-                        onBack()
+                if (isPublishingDialog) return@CreateTournamentDialog
+                isPublishingDialog = true
+                coroutineScope.launch {
+                    try {
+                        val result = viewModel.createTournamentAsync(
+                            title = title,
+                            gameCategory = game,
+                            map = map,
+                            format = format,
+                            scheduleDate = date,
+                            scheduleTime = time,
+                            entryFee = entryFee,
+                            prizePool = prize,
+                            perKill = perKill,
+                            totalSlots = slots
+                        )
+                        if (result.isSuccess) {
+                            Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
+                            showCreateTournamentDialog = false
+                            onBack()
+                        } else {
+                            val errorMsg = result.exceptionOrNull()?.message ?: "Failed to publish tournament"
+                            Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Throwable) {
+                        val errorMsg = e.message ?: "Failed to publish tournament"
+                        Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isPublishingDialog = false
                     }
-                )
+                }
             }
         )
     }

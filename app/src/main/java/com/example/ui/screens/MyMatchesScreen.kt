@@ -94,7 +94,7 @@ fun MyMatchesScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "My Matches",
                         color = TextPrimary,
@@ -107,6 +107,7 @@ fun MyMatchesScreen(
                         fontSize = 12.sp
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = CardNavyElevated,

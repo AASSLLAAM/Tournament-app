@@ -327,6 +327,7 @@ fun MainAppContainer(
     onSignOut: () -> Unit
 ) {
     var currentScreen by remember { mutableStateOf(NavScreen.HOME) }
+    var previousScreen by remember { mutableStateOf(NavScreen.HOME) }
     var selectedTournamentForDetails by remember { mutableStateOf<Tournament?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -346,7 +347,11 @@ fun MainAppContainer(
 
     // Physical back button handler when on secondary screens
     BackHandler(enabled = currentScreen != NavScreen.HOME) {
-        currentScreen = NavScreen.HOME
+        if (currentScreen == NavScreen.MATCH_DETAILS) {
+            currentScreen = previousScreen
+        } else {
+            currentScreen = NavScreen.HOME
+        }
     }
 
     LaunchedEffect(snackbarMsg) {
@@ -400,8 +405,10 @@ fun MainAppContainer(
                                 label = {
                                     Text(
                                         text = screen.title,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 },
                                 colors = NavigationBarItemDefaults.colors(
@@ -427,6 +434,7 @@ fun MainAppContainer(
                     selectedCategory = selectedCategory,
                     onNavigateToWallet = { currentScreen = NavScreen.WALLET },
                     onNavigateToMatchDetails = { tournament ->
+                        previousScreen = currentScreen
                         selectedTournamentForDetails = tournament
                         currentScreen = NavScreen.MATCH_DETAILS
                     },
@@ -441,6 +449,7 @@ fun MainAppContainer(
                     walletBalance = walletBalance,
                     transactions = transactions,
                     onInitiateRazorpayPayment = onInitiatePayment,
+                    onBack = { currentScreen = NavScreen.HOME },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -451,6 +460,7 @@ fun MainAppContainer(
                     tournaments = tournaments,
                     onExploreTournaments = { currentScreen = NavScreen.HOME },
                     onNavigateToMatchDetails = { tournament ->
+                        previousScreen = currentScreen
                         selectedTournamentForDetails = tournament
                         currentScreen = NavScreen.MATCH_DETAILS
                     },
@@ -467,6 +477,7 @@ fun MainAppContainer(
                     onNavigateToWallet = { currentScreen = NavScreen.WALLET },
                     onNavigateToAdmin = { currentScreen = NavScreen.ADMIN },
                     onSignOut = onSignOut,
+                    onBack = { currentScreen = NavScreen.HOME },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -479,6 +490,7 @@ fun MainAppContainer(
                     tournaments = tournaments,
                     onBack = { currentScreen = NavScreen.HOME },
                     onNavigateToMatchDetails = { tournament ->
+                        previousScreen = currentScreen
                         selectedTournamentForDetails = tournament
                         currentScreen = NavScreen.MATCH_DETAILS
                     },
@@ -494,7 +506,7 @@ fun MainAppContainer(
                         tournament = currentTour,
                         viewModel = viewModel,
                         userProfile = userProfile,
-                        onBack = { currentScreen = NavScreen.HOME },
+                        onBack = { currentScreen = previousScreen },
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding)

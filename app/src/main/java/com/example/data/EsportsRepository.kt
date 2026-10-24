@@ -533,9 +533,15 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             // Check if user is registered in admins collection or matches bootstrap email
             val isUserAdmin = try {
                 val adminDoc = db.collection("admins").document(uid).get().await()
-                adminDoc.exists() || (userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true))
+                adminDoc.exists() || (userEmail != null && (
+                    userEmail.equals("ah296629@gmail.com", ignoreCase = true) ||
+                    userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true)
+                ))
             } catch (_: Throwable) {
-                userEmail != null && userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true)
+                userEmail != null && (
+                    userEmail.equals("ah296629@gmail.com", ignoreCase = true) ||
+                    userEmail.equals("aslamhussain096@gmail.com", ignoreCase = true)
+                )
             }
 
             val role = if (isUserAdmin) "admin" else "player"

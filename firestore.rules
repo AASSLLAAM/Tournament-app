@@ -33,7 +33,10 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (request.auth.token.email != null && request.auth.token.email == 'aslamhussain096@gmail.com')
+        (request.auth.token.email != null && (
+          request.auth.token.email == 'ah296629@gmail.com' ||
+          request.auth.token.email == 'aslamhussain096@gmail.com'
+        ))
       );
     }
 
@@ -83,6 +86,7 @@ service cloud.firestore {
              (!('matchesPlayed' in data) || (data.matchesPlayed is int && data.matchesPlayed >= 0)) &&
              (!('role' in data) || (data.role is string && (data.role == 'admin' || data.role == 'player'))) &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 60)) &&
+             (!('username' in data) || (data.username is string && data.username.size() <= 60)) &&
              (!('email' in data) || (data.email is string && data.email.size() <= 120));
     }
 

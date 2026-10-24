@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -82,11 +83,22 @@ fun WalletScreen(
     walletBalance: Int,
     transactions: List<WalletTransaction>,
     onInitiateRazorpayPayment: (amount: Int) -> Unit = {},
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showAddMoneyDialog by remember { mutableStateOf(false) }
     var showWithdrawDialog by remember { mutableStateOf(false) }
     var prefillAmount by remember { mutableStateOf("100") }
+
+    // Physical back button handler: close open dialogs first, else navigate back
+    BackHandler(enabled = true) {
+        if (showAddMoneyDialog || showWithdrawDialog) {
+            showAddMoneyDialog = false
+            showWithdrawDialog = false
+        } else {
+            onBack()
+        }
+    }
 
     val paymentSuccessInfo by viewModel.paymentSuccessInfo.collectAsStateWithLifecycle()
     val isPaymentProcessing by viewModel.isPaymentProcessing.collectAsStateWithLifecycle()
@@ -108,7 +120,7 @@ fun WalletScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "Wallet & Payments",
                         color = TextPrimary,
@@ -122,6 +134,8 @@ fun WalletScreen(
                         fontWeight = FontWeight.Medium
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),

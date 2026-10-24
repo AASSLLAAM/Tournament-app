@@ -438,6 +438,7 @@ fun AuthScreen(
                         onClick = {
                             val cleanEmail = email.trim()
                             if (cleanEmail.isBlank()) {
+                                Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
                                 errorMessage = "Please enter your email"
                             } else {
                                 errorMessage = null
@@ -447,10 +448,14 @@ fun AuthScreen(
                                             Toast.makeText(context, "Password reset email sent!", Toast.LENGTH_SHORT).show()
                                         }
                                         .addOnFailureListener { e ->
-                                            errorMessage = e.localizedMessage ?: "Failed to send password reset email."
+                                            val msg = e.localizedMessage ?: "Failed to send password reset email."
+                                            errorMessage = msg
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                         }
                                 } catch (e: Throwable) {
-                                    errorMessage = e.localizedMessage ?: "Failed to send password reset email."
+                                    val msg = e.localizedMessage ?: "Failed to send password reset email."
+                                    errorMessage = msg
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },

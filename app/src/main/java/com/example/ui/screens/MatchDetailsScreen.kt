@@ -77,14 +77,19 @@ fun MatchDetailsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Physical back button handler
-    BackHandler {
+    var showAddStatDialog by remember { mutableStateOf(false) }
+
+    // Physical back button handler: close dialog first, else return
+    BackHandler(enabled = showAddStatDialog) {
+        showAddStatDialog = false
+    }
+
+    BackHandler(enabled = !showAddStatDialog) {
         onBack()
     }
 
     val resultsFlow = remember(tournament.id) { viewModel.getMatchResults(tournament.id) }
     val resultsList by resultsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-    var showAddStatDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier

@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
@@ -91,11 +92,37 @@ fun HomeScreen(
     var isJoinLoading by remember { mutableStateOf(false) }
     var joinDialogError by remember { mutableStateOf<String?>(null) }
 
+    // Physical back button handler: close open dialogs first
+    BackHandler(enabled = tournamentToJoin != null || tournamentDetail != null) {
+        if (tournamentToJoin != null) {
+            if (!isJoinLoading) {
+                tournamentToJoin = null
+                joinDialogError = null
+            }
+        } else if (tournamentDetail != null) {
+            tournamentDetail = null
+        }
+    }
+
     val filteredTournaments = remember(tournaments, selectedCategory) {
         if (selectedCategory == GameCategory.ALL) {
             tournaments
         } else {
-            tournaments.filter { it.gameCategory == selectedCategory }
+            tournaments.filter { item ->
+                item.gameCategory == selectedCategory ||
+                item.gameCategoryName.equals(selectedCategory.name, ignoreCase = true) ||
+                item.gameCategoryName.equals(selectedCategory.displayName, ignoreCase = true) ||
+                item.gameCategoryName.equals(selectedCategory.shortTag, ignoreCase = true) ||
+                (selectedCategory == GameCategory.BGMI && (
+                    item.bannerType.equals("bgmi", ignoreCase = true) ||
+                    item.title.contains("BGMI", ignoreCase = true) ||
+                    item.title.contains("Battlegrounds", ignoreCase = true)
+                )) ||
+                (selectedCategory == GameCategory.FREE_FIRE && (
+                    item.bannerType.equals("ff", ignoreCase = true) ||
+                    item.title.contains("Free Fire", ignoreCase = true)
+                ))
+            }
         }
     }
 
@@ -135,7 +162,10 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         imageVector = Icons.Default.Whatshot,
                         contentDescription = null,
@@ -150,6 +180,8 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -336,15 +368,23 @@ fun HomeScreen(
                         isJoinLoading = true
                         joinDialogError = null
                         coroutineScope.launch {
-                            val result = viewModel.joinTournamentAsync(item)
-                            isJoinLoading = false
-                            if (result.isSuccess) {
-                                val message = result.getOrNull() ?: "Successfully registered for ${item.title}!"
-                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                                tournamentToJoin = null
-                            } else {
-                                val error = result.exceptionOrNull()?.message ?: "Failed to join tournament. Please try again."
+                            try {
+                                val result = viewModel.joinTournamentAsync(item)
+                                if (result.isSuccess) {
+                                    val message = result.getOrNull() ?: "Successfully registered for ${item.title}!"
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                    tournamentToJoin = null
+                                } else {
+                                    val error = result.exceptionOrNull()?.message ?: "Failed to join tournament. Please try again."
+                                    joinDialogError = error
+                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                }
+                            } catch (e: Throwable) {
+                                val error = e.message ?: "Failed to join tournament. Please try again."
                                 joinDialogError = error
+                                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                            } finally {
+                                isJoinLoading = false
                             }
                         }
                     },
@@ -445,7 +485,10 @@ fun HomeHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Brand Title
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -487,6 +530,8 @@ fun HomeHeader(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Wallet Balance Quick Chip
         Surface(

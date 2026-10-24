@@ -40,10 +40,20 @@ data class Tournament(
     val roomPassword: String? = null
 ) {
     val gameCategory: GameCategory
-        get() = try {
-            GameCategory.valueOf(gameCategoryName)
-        } catch (_: Exception) {
-            GameCategory.FREE_FIRE
+        get() {
+            val raw = gameCategoryName.trim()
+            GameCategory.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }?.let { return it }
+            GameCategory.entries.firstOrNull { it.displayName.equals(raw, ignoreCase = true) }?.let { return it }
+            GameCategory.entries.firstOrNull { it.shortTag.equals(raw, ignoreCase = true) }?.let { return it }
+            val lower = raw.lowercase()
+            return when {
+                lower.contains("bgmi") || lower.contains("pubg") || lower.contains("battleground") -> GameCategory.BGMI
+                lower.contains("valorant") -> GameCategory.VALORANT
+                lower.contains("cod") || lower.contains("call of duty") -> GameCategory.COD_MOBILE
+                lower.contains("free fire") || lower.contains("ff") -> GameCategory.FREE_FIRE
+                bannerType.equals("bgmi", ignoreCase = true) -> GameCategory.BGMI
+                else -> GameCategory.FREE_FIRE
+            }
         }
 
     val format: MatchFormat

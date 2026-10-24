@@ -260,6 +260,47 @@ class EsportsViewModel(
         }
     }
 
+    suspend fun createTournamentAsync(
+        title: String,
+        gameCategory: String,
+        map: String,
+        format: String,
+        scheduleDate: String,
+        scheduleTime: String,
+        entryFee: Int,
+        prizePool: Int,
+        perKill: Int,
+        totalSlots: Int
+    ): Result<String> {
+        _isAdminActionLoading.value = true
+        return try {
+            val result = repository.createTournament(
+                title = title,
+                gameCategory = gameCategory,
+                map = map,
+                format = format,
+                scheduleDate = scheduleDate,
+                scheduleTime = scheduleTime,
+                entryFee = entryFee,
+                prizePool = prizePool,
+                perKill = perKill,
+                totalSlots = totalSlots
+            )
+            if (result.isSuccess) {
+                _snackbarMessage.value = "Tournament '$title' published to Firestore successfully!"
+            } else {
+                _snackbarMessage.value = result.exceptionOrNull()?.message ?: "Failed to create tournament"
+            }
+            result
+        } catch (e: Throwable) {
+            val errorMsg = e.message ?: "Failed to create tournament"
+            _snackbarMessage.value = errorMsg
+            Result.failure(e)
+        } finally {
+            _isAdminActionLoading.value = false
+        }
+    }
+
     // Admin: Create new tournament
     fun createTournament(
         title: String,
@@ -272,7 +313,8 @@ class EsportsViewModel(
         prizePool: Int,
         perKill: Int,
         totalSlots: Int,
-        onSuccess: () -> Unit = {}
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
     ) {
         _isAdminActionLoading.value = true
         viewModelScope.launch {
@@ -293,8 +335,14 @@ class EsportsViewModel(
                     _snackbarMessage.value = "Tournament '$title' published to Firestore successfully!"
                     onSuccess()
                 } else {
-                    _snackbarMessage.value = result.exceptionOrNull()?.message ?: "Failed to create tournament"
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Failed to create tournament"
+                    _snackbarMessage.value = errorMsg
+                    onError(errorMsg)
                 }
+            } catch (e: Throwable) {
+                val errorMsg = e.message ?: "Failed to create tournament"
+                _snackbarMessage.value = errorMsg
+                onError(errorMsg)
             } finally {
                 _isAdminActionLoading.value = false
             }
