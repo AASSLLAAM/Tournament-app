@@ -249,9 +249,6 @@ fun AppRootContent(
                     isGuestMode = true
                 }
             },
-            onContinueAsGuest = {
-                isGuestMode = true
-            },
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
@@ -372,44 +369,50 @@ fun MainAppContainer(
                     }
                 }
 
-                NavigationBar(
+                Surface(
+                    color = CardNavy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .testTag("bottom_nav_bar"),
-                    containerColor = CardNavy,
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    tonalElevation = 8.dp
                 ) {
-                    visibleScreens.forEach { screen ->
-                        val isSelected = currentScreen == screen
-                        val activeColor = if (screen == NavScreen.ADMIN) GoldAccent else NeonCyan
+                    NavigationBar(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("bottom_nav_bar"),
+                        containerColor = CardNavy,
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                        tonalElevation = 8.dp
+                    ) {
+                        visibleScreens.forEach { screen ->
+                            val isSelected = currentScreen == screen
+                            val activeColor = if (screen == NavScreen.ADMIN) GoldAccent else NeonCyan
 
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = { currentScreen = screen },
-                            modifier = Modifier.testTag(screen.testTag),
-                            icon = {
-                                Icon(
-                                    imageVector = if (isSelected) screen.selectedIcon else screen.unselectedIcon,
-                                    contentDescription = screen.title
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = { currentScreen = screen },
+                                modifier = Modifier.testTag(screen.testTag),
+                                icon = {
+                                    Icon(
+                                        imageVector = if (isSelected) screen.selectedIcon else screen.unselectedIcon,
+                                        contentDescription = screen.title
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = screen.title,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color.Black,
+                                    selectedTextColor = activeColor,
+                                    unselectedIconColor = TextSecondary,
+                                    unselectedTextColor = TextMuted,
+                                    indicatorColor = activeColor
                                 )
-                            },
-                            label = {
-                                Text(
-                                    text = screen.title,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.Black,
-                                selectedTextColor = activeColor,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextMuted,
-                                indicatorColor = activeColor
                             )
-                        )
+                        }
                     }
                 }
             }

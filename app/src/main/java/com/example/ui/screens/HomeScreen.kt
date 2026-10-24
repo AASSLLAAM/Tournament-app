@@ -22,11 +22,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,13 +45,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,9 +84,12 @@ fun HomeScreen(
     onNavigateToMatchDetails: (Tournament) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var tournamentToJoin by remember { mutableStateOf<Tournament?>(null) }
     var tournamentDetail by remember { mutableStateOf<Tournament?>(null) }
-    val isJoining by viewModel.isJoining.collectAsState()
+    var isJoinLoading by remember { mutableStateOf(false) }
+    var joinDialogError by remember { mutableStateOf<String?>(null) }
 
     val filteredTournaments = remember(tournaments, selectedCategory) {
         if (selectedCategory == GameCategory.ALL) {
@@ -181,7 +189,11 @@ fun HomeScreen(
             items(filteredTournaments, key = { it.id }) { tournament ->
                 TournamentCard(
                     tournament = tournament,
-                    onJoinClick = { tournamentToJoin = tournament },
+                    onJoinClick = {
+                        isJoinLoading = false
+                        joinDialogError = null
+                        tournamentToJoin = tournament
+                    },
                     onDetailsClick = { onNavigateToMatchDetails(tournament) },
                     onViewResultsClick = { onNavigateToMatchDetails(tournament) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -193,7 +205,12 @@ fun HomeScreen(
     // Join Tournament Confirmation Dialog
     tournamentToJoin?.let { item ->
         AlertDialog(
-            onDismissRequest = { if (!isJoining) tournamentToJoin = null },
+            onDismissRequest = {
+                if (!isJoinLoading) {
+                    tournamentToJoin = null
+                    joinDialogError = null
+                }
+            },
             title = {
                 Text(
                     text = "Confirm Tournament Entry",
@@ -248,26 +265,97 @@ fun HomeScreen(
 
                     if (walletBalance < item.entryFee) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "⚠ Insufficient balance. Please top up ₹${item.entryFee - walletBalance} in Wallet.",
-                            color = CrimsonRed,
-                            fontSize = 12.sp
-                        )
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    tournamentToJoin = null
+                                    joinDialogError = null
+                                    onNavigateToWallet()
+                                },
+                            color = CrimsonRed.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, CrimsonRed.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "⚠ Insufficient balance. Need ₹${item.entryFee - walletBalance} more.",
+                                    color = CrimsonRed,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "Add Cash →",
+                                    color = NeonCyan,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Display Firestore error message if join failed
+                    if (!joinDialogError.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = CrimsonRed.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, CrimsonRed.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Error",
+                                    tint = CrimsonRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = joinDialogError!!,
+                                    color = CrimsonRed,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
                     }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.joinTournament(item)
-                        tournamentToJoin = null
+                        if (isJoinLoading) return@Button
+                        isJoinLoading = true
+                        joinDialogError = null
+                        coroutineScope.launch {
+                            val result = viewModel.joinTournamentAsync(item)
+                            isJoinLoading = false
+                            if (result.isSuccess) {
+                                val message = result.getOrNull() ?: "Successfully registered for ${item.title}!"
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                tournamentToJoin = null
+                            } else {
+                                val error = result.exceptionOrNull()?.message ?: "Failed to join tournament. Please try again."
+                                joinDialogError = error
+                            }
+                        }
                     },
-                    enabled = !isJoining && walletBalance >= item.entryFee,
+                    enabled = !isJoinLoading && walletBalance >= item.entryFee,
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
                     modifier = Modifier.testTag("dialog_confirm_join_btn")
                 ) {
-                    if (isJoining) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black)
+                    if (isJoinLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Joining...", fontWeight = FontWeight.Bold)
                     } else {
                         Text("Deduct ₹${item.entryFee} & Join", fontWeight = FontWeight.Bold)
                     }
@@ -275,8 +363,12 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { tournamentToJoin = null },
-                    enabled = !isJoining,
+                    onClick = {
+                        tournamentToJoin = null
+                        joinDialogError = null
+                        isJoinLoading = false
+                    },
+                    enabled = !isJoinLoading,
                     modifier = Modifier.testTag("dialog_cancel_join_btn")
                 ) {
                     Text("Cancel", color = TextSecondary)

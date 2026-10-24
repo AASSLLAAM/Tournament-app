@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,6 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,6 +75,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.auth.userProfileChangeRequest
 import kotlinx.coroutines.CoroutineScope
@@ -81,9 +85,9 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
-    onContinueAsGuest: () -> Unit = onAuthSuccess,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var isSignUpMode by remember { mutableStateOf(false) }
@@ -119,7 +123,7 @@ fun AuthScreen(
                     Firebase.auth
                 } catch (e: Throwable) {
                     isLoading = false
-                    errorMessage = "Firebase Authentication unavailable on this device. Tap 'Continue as Guest' below."
+                    errorMessage = "Firebase Authentication unavailable. Please check your internet connection."
                     return@launch
                 }
                 if (isSignUpMode) {
@@ -165,10 +169,10 @@ fun AuthScreen(
                         "Too many attempts. Please try again later."
                     e is com.google.firebase.FirebaseNetworkException ||
                     rawMsg.contains("network", ignoreCase = true) ->
-                        "Network connection issue. Tap 'Continue as Guest' below to explore."
+                        "Network connection issue. Please check your internet connection and try again."
                     rawMsg.contains("API key", ignoreCase = true) ||
                     rawMsg.contains("internal error", ignoreCase = true) ->
-                        "Cloud service unavailable. Tap 'Continue as Guest' below."
+                        "Authentication service temporarily unavailable. Please try again later."
                     else -> rawMsg
                 }
             }
@@ -427,8 +431,44 @@ fun AuthScreen(
                     }
                 }
 
+                // Forgot Password button (right below the Sign In with Email button)
+                if (!isSignUpMode) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = {
+                            val cleanEmail = email.trim()
+                            if (cleanEmail.isBlank()) {
+                                errorMessage = "Please enter your email"
+                            } else {
+                                errorMessage = null
+                                try {
+                                    FirebaseAuth.getInstance().sendPasswordResetEmail(cleanEmail)
+                                        .addOnSuccessListener {
+                                            Toast.makeText(context, "Password reset email sent!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .addOnFailureListener { e ->
+                                            errorMessage = e.localizedMessage ?: "Failed to send password reset email."
+                                        }
+                                } catch (e: Throwable) {
+                                    errorMessage = e.localizedMessage ?: "Failed to send password reset email."
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .testTag("forgot_password_button")
+                    ) {
+                        Text(
+                            text = "Forgot Password?",
+                            color = NeonCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
                 if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = errorMessage ?: "",
                         color = Color(0xFFFF5252),
@@ -465,28 +505,6 @@ fun AuthScreen(
                                 .padding(4.dp)
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedButton(
-                    onClick = onContinueAsGuest,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("guest_mode_button"),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, BorderMuted),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SportsEsports,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = NeonCyan
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Continue as Guest (Offline Mode)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

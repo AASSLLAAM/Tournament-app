@@ -211,7 +211,30 @@ class EsportsViewModel(
         _snackbarMessage.value = "Razorpay Payment Failed: $message (Error code: $code)"
     }
 
-    fun joinTournament(tournament: Tournament) {
+    suspend fun joinTournamentAsync(tournament: Tournament): Result<String> {
+        _isJoining.value = true
+        return try {
+            val result = repository.joinTournament(tournament)
+            if (result.isSuccess) {
+                _snackbarMessage.value = result.getOrNull() ?: "Joined ${tournament.title}!"
+            } else {
+                _snackbarMessage.value = result.exceptionOrNull()?.message ?: "Failed to join tournament"
+            }
+            result
+        } catch (e: Exception) {
+            val errorMsg = e.message ?: "Failed to join tournament"
+            _snackbarMessage.value = errorMsg
+            Result.failure(e)
+        } finally {
+            _isJoining.value = false
+        }
+    }
+
+    fun joinTournament(
+        tournament: Tournament,
+        onSuccess: (String) -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         if (_isJoining.value) return
         _isJoining.value = true
 
@@ -219,10 +242,18 @@ class EsportsViewModel(
             try {
                 val result = repository.joinTournament(tournament)
                 if (result.isSuccess) {
-                    _snackbarMessage.value = result.getOrNull() ?: "Joined ${tournament.title}!"
+                    val msg = result.getOrNull() ?: "Joined ${tournament.title}!"
+                    _snackbarMessage.value = msg
+                    onSuccess(msg)
                 } else {
-                    _snackbarMessage.value = result.exceptionOrNull()?.message ?: "Failed to join tournament"
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Failed to join tournament"
+                    _snackbarMessage.value = errorMsg
+                    onError(errorMsg)
                 }
+            } catch (e: Exception) {
+                val errorMsg = e.message ?: "Failed to join tournament"
+                _snackbarMessage.value = errorMsg
+                onError(errorMsg)
             } finally {
                 _isJoining.value = false
             }
