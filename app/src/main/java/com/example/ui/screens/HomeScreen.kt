@@ -38,6 +38,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,10 +89,12 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val userProfile by viewModel.userProfile.collectAsState()
     var tournamentToJoin by remember { mutableStateOf<Tournament?>(null) }
     var tournamentDetail by remember { mutableStateOf<Tournament?>(null) }
     var isJoinLoading by remember { mutableStateOf(false) }
     var joinDialogError by remember { mutableStateOf<String?>(null) }
+    var inGameUidInput by remember { mutableStateOf("") }
 
     // Physical back button handler: close open dialogs first
     BackHandler(enabled = tournamentToJoin != null || tournamentDetail != null) {
@@ -224,6 +228,7 @@ fun HomeScreen(
                     onJoinClick = {
                         isJoinLoading = false
                         joinDialogError = null
+                        inGameUidInput = userProfile.ingameId.ifBlank { "" }
                         tournamentToJoin = tournament
                     },
                     onDetailsClick = { onNavigateToMatchDetails(tournament) },
@@ -330,6 +335,41 @@ fun HomeScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "In-Game UID (Verification)",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Admin will verify this UID inside the custom room match lobby.",
+                        color = TextMuted,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = inGameUidInput,
+                        onValueChange = {
+                            inGameUidInput = it
+                            if (joinDialogError != null) joinDialogError = null
+                        },
+                        label = { Text("Enter In-Game UID (FF / BGMI)") },
+                        placeholder = { Text("e.g. 5183920194 or Character ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("dialog_ingame_uid_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderMuted,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedLabelColor = NeonCyan
+                        )
+                    )
+
                     // Display Firestore error message if join failed
                     if (!joinDialogError.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(10.dp))
@@ -365,11 +405,16 @@ fun HomeScreen(
                 Button(
                     onClick = {
                         if (isJoinLoading) return@Button
+                        val trimmedUid = inGameUidInput.trim()
+                        if (trimmedUid.isBlank()) {
+                            joinDialogError = "Please enter your In-Game UID so Admin can verify you."
+                            return@Button
+                        }
                         isJoinLoading = true
                         joinDialogError = null
                         coroutineScope.launch {
                             try {
-                                val result = viewModel.joinTournamentAsync(item)
+                                val result = viewModel.joinTournamentAsync(item, trimmedUid)
                                 if (result.isSuccess) {
                                     val message = result.getOrNull() ?: "Successfully registered for ${item.title}!"
                                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()

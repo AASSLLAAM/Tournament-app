@@ -24,7 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Schedule
@@ -36,6 +39,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,12 +52,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.model.MatchResult
 import com.example.model.Tournament
 import com.example.model.UserProfile
@@ -61,7 +67,9 @@ import com.example.ui.theme.BorderCyan
 import com.example.ui.theme.BorderMuted
 import com.example.ui.theme.CardNavy
 import com.example.ui.theme.CardNavyElevated
+import com.example.ui.theme.CrimsonRed
 import com.example.ui.theme.DarkNavy
+import com.example.ui.theme.EmeraldGreen
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
@@ -90,6 +98,10 @@ fun MatchDetailsScreen(
 
     val resultsFlow = remember(tournament.id) { viewModel.getMatchResults(tournament.id) }
     val resultsList by resultsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val participantsFlow = remember(tournament.id) { viewModel.getTournamentParticipants(tournament.id) }
+    val participantsList by participantsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val pendingSubmissions = remember(participantsList) { participantsList.filter { it.submissionStatus == "pending" } }
 
     Box(
         modifier = modifier
@@ -291,6 +303,164 @@ fun MatchDetailsScreen(
                                         Column {
                                             Text("Tournament Champion", color = GoldAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                             Text(tournament.winnerName, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Admin: Pending Result Submissions (OCR verified screenshots)
+            if (userProfile.isAdmin && pendingSubmissions.isNotEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("pending_submissions_card"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardNavy),
+                        border = BorderStroke(1.dp, GoldAccent.copy(alpha = 0.6f))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.HourglassTop, contentDescription = null, tint = GoldAccent, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Pending Player Results",
+                                        color = TextPrimary,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = GoldAccent.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "${pendingSubmissions.size} Submissions",
+                                        color = GoldAccent,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Verify screenshots submitted by players. Approving will automatically update the leaderboard below.",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                pendingSubmissions.forEach { sub ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = CardNavyElevated,
+                                        border = BorderStroke(1.dp, BorderCyan.copy(alpha = 0.4f)),
+                                        modifier = Modifier.fillMaxWidth().testTag("pending_submission_item_${sub.userId}")
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = "${sub.username} (Slot #${sub.slotNumber})",
+                                                        color = TextPrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Text(
+                                                        text = "UID: ${sub.inGameUid.ifBlank { "N/A" }}",
+                                                        color = NeonCyan,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = EmeraldGreen.copy(alpha = 0.15f)
+                                                ) {
+                                                    Text(
+                                                        text = "Claimed: ${sub.kills} Kills • #${sub.rank}",
+                                                        color = EmeraldGreen,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            if (!sub.resultImageUrl.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.fillMaxWidth().height(140.dp)
+                                                ) {
+                                                    AsyncImage(
+                                                        model = sub.resultImageUrl,
+                                                        contentDescription = "Match Scoreboard Screenshot",
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.reviewResultSubmission(
+                                                            tournamentId = tournament.id,
+                                                            participant = sub,
+                                                            approved = true,
+                                                            points = sub.kills * 10,
+                                                            prizeWon = if (sub.rank == 1) tournament.prizePool else 0
+                                                        )
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen, contentColor = Color.Black),
+                                                    modifier = Modifier.weight(1f).testTag("admin_approve_submission_${sub.userId}"),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(vertical = 6.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Approve & Publish", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                }
+
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        viewModel.reviewResultSubmission(
+                                                            tournamentId = tournament.id,
+                                                            participant = sub,
+                                                            approved = false
+                                                        )
+                                                    },
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonRed),
+                                                    border = BorderStroke(1.dp, CrimsonRed),
+                                                    modifier = Modifier.weight(1f).testTag("admin_reject_submission_${sub.userId}"),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(vertical = 6.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Reject", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                }
+                                            }
                                         }
                                     }
                                 }

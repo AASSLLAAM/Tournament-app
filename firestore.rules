@@ -66,11 +66,19 @@ service cloud.firestore {
         (!('winnerName' in incoming()) &&
          incoming().diff(existing()).affectedKeys().hasOnly(['filledSlots', 'statusText']) &&
          incoming().filledSlots >= existing().filledSlots) ||
-        // Only Admin can declare winner or update tournament details
-        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['winnerName', 'statusText', 'title', 'map', 'scheduleTime', 'scheduleDate', 'entryFee', 'prizePool', 'perKill', 'totalSlots', 'filledSlots', 'bannerType', 'serverType', 'organizer', 'declaredWinnerAt']))
+        // Only Admin can declare winner or update tournament details (including Room ID and Room Password)
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['winnerName', 'statusText', 'title', 'map', 'scheduleTime', 'scheduleDate', 'entryFee', 'prizePool', 'perKill', 'totalSlots', 'filledSlots', 'bannerType', 'serverType', 'organizer', 'declaredWinnerAt', 'roomId', 'roomPassword']))
       );
 
       allow delete: if isAdmin();
+
+      // Registered tournament participants subcollection
+      match /participants/{participantId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isSignedIn() && (participantId == request.auth.uid || isAdmin());
+        allow delete: if isAdmin();
+      }
 
       // Match Results / Leaderboard Subcollection
       match /results/{resultId} {
@@ -110,7 +118,8 @@ service cloud.firestore {
       match /registrations/{registrationId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && isValidId(registrationId) && isValidRegistration(incoming());
-        allow update, delete: if isAdmin();
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isAdmin();
       }
 
       // 4. User Transactions Subcollection:

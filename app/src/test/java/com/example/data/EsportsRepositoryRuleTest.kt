@@ -107,5 +107,43 @@ class EsportsRepositoryRuleTest : FirestoreEmulatorTestBase() {
     assertEquals(paymentId, txSnap.getString("paymentId"))
     assertEquals("Razorpay Standard", txSnap.getString("gateway"))
   }
+
+  @Test
+  fun testJoinTournamentWithInGameUidAndAdminRoomUpdate() = runBlocking {
+    val uid = signInTestUser("player_uid_test@arenawar.in")
+    val repo = EsportsRepository(firestore)
+
+    repo.ensureUserProfileExists("player_uid_test@arenawar.in", "UidPlayer")
+    repo.seedDefaultTournamentsIfEmpty()
+
+    val tournaments = withTimeout(5000L) {
+      repo.observeTournaments().first { it.isNotEmpty() }
+    }
+    val targetTour = tournaments.first()
+    val testUid = "FF-9948201"
+
+    val joinRes = repo.joinTournament(targetTour, testUid)
+    assertTrue(joinRes.isSuccess)
+
+    // Check registration document has inGameUid
+    val regDoc = firestore.collection("users").document(uid).collection("registrations").document(targetTour.id).get().await()
+    assertTrue(regDoc.exists())
+    assertEquals(testUid, regDoc.getString("inGameUid"))
+
+    // Check participant document in tournament collection has inGameUid
+    val participantDoc = firestore.collection("tournaments").document(targetTour.id).collection("participants").document(uid).get().await()
+    assertTrue(participantDoc.exists())
+    assertEquals(testUid, participantDoc.getString("inGameUid"))
+
+    // Admin updates room credentials
+    val adminUid = signInTestUser("aslamhussain096@gmail.com")
+    val adminRes = repo.updateRoomCredentials(targetTour.id, "ROOM-7788", "pass998")
+    assertTrue(adminRes.isSuccess)
+
+    val updatedTourDoc = firestore.collection("tournaments").document(targetTour.id).get().await()
+    assertEquals("ROOM-7788", updatedTourDoc.getString("roomId"))
+    assertEquals("pass998", updatedTourDoc.getString("roomPassword"))
+  }
 }
+
 

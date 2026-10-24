@@ -1,5 +1,6 @@
 package com.example.viewmodel
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.EsportsRepository
@@ -7,6 +8,7 @@ import com.example.model.GameCategory
 import com.example.model.MatchResult
 import com.example.model.PaymentSuccessInfo
 import com.example.model.Tournament
+import com.example.model.TournamentParticipant
 import com.example.model.UserProfile
 import com.example.model.UserRegistration
 import com.example.model.WalletTransaction
@@ -37,6 +39,9 @@ class EsportsViewModel(
     private val _isAdminActionLoading = MutableStateFlow(false)
     val isAdminActionLoading: StateFlow<Boolean> = _isAdminActionLoading.asStateFlow()
 
+    private val _isResultSubmitting = MutableStateFlow(false)
+    val isResultSubmitting: StateFlow<Boolean> = _isResultSubmitting.asStateFlow()
+
     private val _isPaymentProcessing = MutableStateFlow(false)
     val isPaymentProcessing: StateFlow<Boolean> = _isPaymentProcessing.asStateFlow()
 
@@ -58,10 +63,18 @@ class EsportsViewModel(
         allTournaments.map { tour ->
             val reg = regMap[tour.id]
             if (reg != null) {
+                val activeRoomId = if (!tour.roomId.isNullOrBlank()) tour.roomId else reg.roomId
+                val activeRoomPassword = if (!tour.roomPassword.isNullOrBlank()) tour.roomPassword else reg.roomPassword
                 tour.copy(
                     isJoined = true,
-                    roomId = reg.roomId ?: tour.roomId,
-                    roomPassword = reg.roomPassword ?: tour.roomPassword
+                    roomId = activeRoomId,
+                    roomPassword = activeRoomPassword,
+                    submissionStatus = reg.submissionStatus,
+                    submittedKills = reg.kills,
+                    submittedRank = reg.rank,
+                    submittedImageUrl = reg.resultImageUrl,
+                    registeredInGameUid = reg.inGameUid,
+                    imageHash = reg.imageHash
                 )
             } else {
                 tour.copy(isJoined = false)
@@ -211,10 +224,10 @@ class EsportsViewModel(
         _snackbarMessage.value = "Razorpay Payment Failed: $message (Error code: $code)"
     }
 
-    suspend fun joinTournamentAsync(tournament: Tournament): Result<String> {
+    suspend fun joinTournamentAsync(tournament: Tournament, inGameUid: String = ""): Result<String> {
         _isJoining.value = true
         return try {
-            val result = repository.joinTournament(tournament)
+            val result = repository.joinTournament(tournament, inGameUid)
             if (result.isSuccess) {
                 _snackbarMessage.value = result.getOrNull() ?: "Joined ${tournament.title}!"
             } else {
@@ -232,6 +245,7 @@ class EsportsViewModel(
 
     fun joinTournament(
         tournament: Tournament,
+        inGameUid: String = "",
         onSuccess: (String) -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
@@ -240,7 +254,7 @@ class EsportsViewModel(
 
         viewModelScope.launch {
             try {
-                val result = repository.joinTournament(tournament)
+                val result = repository.joinTournament(tournament, inGameUid)
                 if (result.isSuccess) {
                     val msg = result.getOrNull() ?: "Joined ${tournament.title}!"
                     _snackbarMessage.value = msg
@@ -259,6 +273,7 @@ class EsportsViewModel(
             }
         }
     }
+
 
     suspend fun createTournamentAsync(
         title: String,
@@ -430,4 +445,117 @@ class EsportsViewModel(
             }
         }
     }
+
+    // Admin: Update Room ID & Room Password for players
+    fun updateRoomCredentials(
+        tournamentId: String,
+        roomId: String,
+        roomPassword: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        if (roomId.isBlank()) {
+            _snackbarMessage.value = "Room ID cannot be empty."
+            return
+        }
+        _isAdminActionLoading.value = true
+        viewModelScope.launch {
+            try {
+                val res = repository.updateRoomCredentials(tournamentId, roomId, roomPassword)
+                if (res.isSuccess) {
+                    _snackbarMessage.value = "Room credentials updated successfully!"
+                    onSuccess()
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Failed to update room details"
+                    _snackbarMessage.value = err
+                    onError(err)
+                }
+            } catch (e: Throwable) {
+                val err = e.message ?: "Failed to update room details"
+                _snackbarMessage.value = err
+                onError(err)
+            } finally {
+                _isAdminActionLoading.value = false
+            }
+        }
+    }
+
+    // Admin: Stream registered players (with In-Game UIDs)
+    fun getTournamentParticipants(tournamentId: String): Flow<List<TournamentParticipant>> {
+        return repository.observeTournamentParticipants(tournamentId)
+    }
+
+    // User: Submit Match Result (OCR extracted Kills & Rank + Screenshot + Image Hash)
+    fun submitMatchResult(
+        tournamentId: String,
+        kills: Int,
+        rank: Int,
+        imageUri: Uri?,
+        imageHash: String = "",
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        _isResultSubmitting.value = true
+        viewModelScope.launch {
+            try {
+                val res = repository.submitMatchResult(tournamentId, kills, rank, imageUri, imageHash)
+                if (res.isSuccess) {
+                    val msg = res.getOrNull() ?: "Match result submitted! Pending verification."
+                    _snackbarMessage.value = msg
+                    onSuccess()
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Failed to submit result"
+                    _snackbarMessage.value = err
+                    onError(err)
+                }
+            } catch (e: Throwable) {
+                val err = e.message ?: "Failed to submit result"
+                _snackbarMessage.value = err
+                onError(err)
+            } finally {
+                _isResultSubmitting.value = false
+            }
+        }
+    }
+
+    // Admin: Review participant result submission (Approve or Reject)
+    fun reviewResultSubmission(
+        tournamentId: String,
+        participant: TournamentParticipant,
+        approved: Boolean,
+        points: Int = 0,
+        prizeWon: Int = 0,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        _isAdminActionLoading.value = true
+        viewModelScope.launch {
+            try {
+                val res = repository.reviewResultSubmission(
+                    tournamentId = tournamentId,
+                    participant = participant,
+                    approved = approved,
+                    points = points,
+                    prizeWon = prizeWon
+                )
+                if (res.isSuccess) {
+                    val actionName = if (approved) "approved and published to leaderboard" else "rejected"
+                    _snackbarMessage.value = "Submission for ${participant.username} has been $actionName."
+                    onSuccess()
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Failed to update review status"
+                    _snackbarMessage.value = err
+                    onError(err)
+                }
+            } catch (e: Throwable) {
+                val err = e.message ?: "Failed to update review status"
+                _snackbarMessage.value = err
+                onError(err)
+            } finally {
+                _isAdminActionLoading.value = false
+            }
+        }
+    }
 }
+
+

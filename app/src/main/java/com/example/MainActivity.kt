@@ -457,6 +457,7 @@ fun MainAppContainer(
             }
             NavScreen.MY_MATCHES -> {
                 MyMatchesScreen(
+                    viewModel = viewModel,
                     tournaments = tournaments,
                     onExploreTournaments = { currentScreen = NavScreen.HOME },
                     onNavigateToMatchDetails = { tournament ->

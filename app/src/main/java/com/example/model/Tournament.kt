@@ -37,7 +37,13 @@ data class Tournament(
     val winnerName: String? = null,
     val isJoined: Boolean = false,
     val roomId: String? = null,
-    val roomPassword: String? = null
+    val roomPassword: String? = null,
+    val submissionStatus: String = "none", // "none", "pending", "approved", "rejected"
+    val submittedKills: Int = 0,
+    val submittedRank: Int = 1,
+    val submittedImageUrl: String? = null,
+    val registeredInGameUid: String = "",
+    val imageHash: String = ""
 ) {
     val gameCategory: GameCategory
         get() {
@@ -66,7 +72,7 @@ data class Tournament(
     val isFull: Boolean get() = filledSlots >= totalSlots
     val slotsRemaining: Int get() = (totalSlots - filledSlots).coerceAtLeast(0)
     val progress: Float get() = if (totalSlots > 0) filledSlots.toFloat() / totalSlots.toFloat() else 0f
-    val isCompleted: Boolean get() = !winnerName.isNullOrBlank() || statusText.equals("Completed", ignoreCase = true)
+    val isCompleted: Boolean get() = !winnerName.isNullOrBlank() || statusText.equals("Completed", ignoreCase = true) || statusText.equals("Finished", ignoreCase = true)
 }
 
 // User profile model stored in /users/{userId}
@@ -96,11 +102,33 @@ data class UserRegistration(
     val tournamentId: String = "",
     val tournamentTitle: String = "",
     val userId: String = "",
+    val inGameUid: String = "",
     val entryFee: Int = 0,
     val roomId: String? = null,
     val roomPassword: String? = null,
     val slotNumber: Int = 1,
-    val joinedAt: Timestamp? = null
+    val joinedAt: Timestamp? = null,
+    val kills: Int = 0,
+    val rank: Int = 1,
+    val resultImageUrl: String? = null,
+    val imageHash: String = "",
+    val submissionStatus: String = "none", // "none", "pending", "approved", "rejected"
+    val submittedAt: Timestamp? = null
+)
+
+// Subcollection: /tournaments/{tournamentId}/participants/{participantId}
+data class TournamentParticipant(
+    val userId: String = "",
+    val inGameUid: String = "",
+    val username: String = "",
+    val slotNumber: Int = 1,
+    val joinedAt: Timestamp? = null,
+    val kills: Int = 0,
+    val rank: Int = 1,
+    val resultImageUrl: String? = null,
+    val imageHash: String = "",
+    val submissionStatus: String = "none", // "none", "pending", "approved", "rejected"
+    val submittedAt: Timestamp? = null
 )
 
 // Subcollection: /users/{userId}/transactions/{transactionId}

@@ -1,10 +1,12 @@
 package com.example.data
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.example.R
 import com.example.model.MatchResult
 import com.example.model.Tournament
+import com.example.model.TournamentParticipant
 import com.example.model.UserProfile
 import com.example.model.UserRegistration
 import com.example.model.WalletTransaction
@@ -16,6 +18,7 @@ import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.snapshots
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
@@ -902,8 +905,12 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    // Join Tournament
-    suspend fun joinTournament(tournament: Tournament): Result<String> {
+    // Join Tournament with In-Game UID
+    suspend fun joinTournament(tournament: Tournament, inGameUid: String = ""): Result<String> {
+        val cleanUid = inGameUid.trim().ifBlank {
+            if (isGuest()) "WW-GUEST" else "WW-PLAYER"
+        }
+
         if (isGuest()) {
             val alreadyJoined = guestRegistrationsFlow.value.any { it.tournamentId == tournament.id }
             if (alreadyJoined) {
@@ -917,18 +924,20 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             val currentMatches = current.matchesPlayed
             guestProfileFlow.value = current.copy(
                 walletBalance = newBalance,
-                matchesPlayed = currentMatches + 1
+                matchesPlayed = currentMatches + 1,
+                ingameId = if (cleanUid.isNotBlank() && cleanUid != "WW-GUEST") cleanUid else current.ingameId
             )
-            val roomId = "ROOM-${(1000..9999).random()}"
-            val roomPassword = "${(100..999).random()}"
+            val effectiveRoomId = tournament.roomId
+            val effectivePassword = tournament.roomPassword
             val newReg = UserRegistration(
                 registrationId = tournament.id,
                 tournamentId = tournament.id,
                 tournamentTitle = tournament.title,
                 userId = "player_guest",
+                inGameUid = cleanUid,
                 entryFee = tournament.entryFee,
-                roomId = roomId,
-                roomPassword = roomPassword,
+                roomId = effectiveRoomId,
+                roomPassword = effectivePassword,
                 slotNumber = tournament.filledSlots + 1
             )
             guestRegistrationsFlow.value = listOf(newReg) + guestRegistrationsFlow.value
@@ -945,8 +954,10 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 )
                 guestTransactionsFlow.value = listOf(newTx) + guestTransactionsFlow.value
             }
-            return Result.success("Joined ${tournament.title}! Room ID: $roomId, Pass: $roomPassword")
+            val roomMsg = if (!effectiveRoomId.isNullOrBlank()) "Room: $effectiveRoomId" else "Room details will be updated before match"
+            return Result.success("Joined ${tournament.title}! UID: $cleanUid. $roomMsg")
         }
+
         val uid = requireUserId()
         val userDocRef = db.collection("users").document(uid)
         val tourDocRef = db.collection("tournaments").document(tournament.id)
@@ -976,33 +987,50 @@ class EsportsRepository(private val db: FirebaseFirestore) {
             // Deduct entry fee
             val newBalance = currentBalance - tournament.entryFee
             val currentMatches = (userSnap.getLong("matchesPlayed") ?: 0L).toInt()
-            userDocRef.update(
-                mapOf(
-                    "walletBalance" to newBalance,
-                    "matchesPlayed" to currentMatches + 1
-                )
-            ).await()
+            val userUpdates = mutableMapOf<String, Any>(
+                "walletBalance" to newBalance,
+                "matchesPlayed" to currentMatches + 1
+            )
+            if (cleanUid.isNotBlank() && cleanUid != "WW-PLAYER") {
+                userUpdates["ingameId"] = cleanUid
+            }
+            userDocRef.update(userUpdates).await()
 
             // Increment slots
             tourDocRef.update("filledSlots", filledSlots + 1).await()
 
-            // Save Registration
-            val roomId = "ROOM-${(1000..9999).random()}"
-            val roomPassword = "${(100..999).random()}"
+            // Current tournament room details (if already set by Admin)
+            val currentRoomId = tourSnap.getString("roomId") ?: tournament.roomId
+            val currentRoomPass = tourSnap.getString("roomPassword") ?: tournament.roomPassword
             val slotNumber = filledSlots + 1
 
+            // Save Registration in user subcollection
             val regMap = mapOf(
                 "registrationId" to tournament.id,
                 "tournamentId" to tournament.id,
                 "tournamentTitle" to tournament.title,
                 "userId" to uid,
+                "inGameUid" to cleanUid,
                 "entryFee" to tournament.entryFee,
-                "roomId" to roomId,
-                "roomPassword" to roomPassword,
+                "roomId" to currentRoomId,
+                "roomPassword" to currentRoomPass,
                 "slotNumber" to slotNumber,
                 "joinedAt" to FieldValue.serverTimestamp()
             )
             regDocRef.set(regMap).await()
+
+            // Save Participant in tournament subcollection for Admin verification
+            try {
+                val username = userSnap.getString("username") ?: "Player"
+                val participantMap = mapOf(
+                    "userId" to uid,
+                    "inGameUid" to cleanUid,
+                    "username" to username,
+                    "slotNumber" to slotNumber,
+                    "joinedAt" to FieldValue.serverTimestamp()
+                )
+                tourDocRef.collection("participants").document(uid).set(participantMap).await()
+            } catch (_: Throwable) {}
 
             if (tournament.entryFee > 0) {
                 val txId = "tx_fee_${System.currentTimeMillis() % 100000}"
@@ -1021,10 +1049,235 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 } catch (_: Throwable) {}
             }
 
-            return Result.success("Joined ${tournament.title}! Room ID: $roomId, Pass: $roomPassword")
+            val roomMsg = if (!currentRoomId.isNullOrBlank()) "Room: $currentRoomId" else "Room details will be updated by Admin before match"
+            return Result.success("Joined ${tournament.title}! UID: $cleanUid. $roomMsg")
         } catch (e: Throwable) {
             handleFirestoreError(e, OperationType.WRITE, "users/$uid/registrations/${tournament.id}")
             return Result.failure(e)
         }
     }
+
+    // Admin: Update Room ID and Password for a tournament
+    suspend fun updateRoomCredentials(tournamentId: String, roomId: String, roomPassword: String): Result<Unit> {
+        val trimmedRoom = roomId.trim()
+        val trimmedPass = roomPassword.trim()
+        if (isGuest()) {
+            return Result.success(Unit)
+        }
+        return try {
+            val tourDocRef = db.collection("tournaments").document(tournamentId)
+            tourDocRef.update(
+                mapOf(
+                    "roomId" to trimmedRoom,
+                    "roomPassword" to trimmedPass
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.UPDATE, "tournaments/$tournamentId")
+            Result.failure(e)
+        }
+    }
+
+    // Admin: Observe registered participants (with In-Game UIDs) for match verification
+    fun observeTournamentParticipants(tournamentId: String): Flow<List<TournamentParticipant>> = flow {
+        val path = "tournaments/$tournamentId/participants"
+        try {
+            emitAll(
+                db.collection("tournaments").document(tournamentId).collection("participants")
+                    .snapshots()
+                    .map { snapshot ->
+                        snapshot.documents.mapNotNull { doc ->
+                            try {
+                                doc.toObject(TournamentParticipant::class.java)?.copy(userId = doc.id)
+                            } catch (_: Throwable) {
+                                null
+                            }
+                        }
+                    }
+                    .catch { error ->
+                        Log.w(TAG, "observeTournamentParticipants stream warning: ${error.message}")
+                        emit(emptyList())
+                    }
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "observeTournamentParticipants catch: ${e.message}")
+            emit(emptyList())
+        }
+    }
+
+    // User: Submit Match Result Screenshot and Claimed Kills & Rank (OCR processed + Anti-Cheat Hash)
+    suspend fun submitMatchResult(
+        tournamentId: String,
+        kills: Int,
+        rank: Int,
+        imageUri: Uri?,
+        imageHash: String = ""
+    ): Result<String> {
+        val uid = requireUserId()
+        if (isGuest()) {
+            if (imageHash.isNotBlank()) {
+                val isDuplicate = guestRegistrationsFlow.value.any {
+                    it.tournamentId == tournamentId && it.imageHash.isNotBlank() && it.imageHash == imageHash && it.userId != uid
+                }
+                if (isDuplicate) {
+                    return Result.failure(IllegalStateException("Duplicate image detected. This screenshot has already been submitted by another user."))
+                }
+            }
+
+            val imageStr = imageUri?.toString() ?: ""
+            guestRegistrationsFlow.value = guestRegistrationsFlow.value.map {
+                if (it.tournamentId == tournamentId) {
+                    it.copy(
+                        kills = kills,
+                        rank = rank,
+                        resultImageUrl = imageStr,
+                        imageHash = imageHash,
+                        submissionStatus = "pending",
+                        submittedAt = com.google.firebase.Timestamp.now()
+                    )
+                } else it
+            }
+            return Result.success("Result submitted for admin verification!")
+        }
+
+        return try {
+            // Anti-Cheat: Reject duplicate image hash submitted by any other user for this tournament
+            if (imageHash.isNotBlank()) {
+                try {
+                    val participantsSnap = db.collection("tournaments").document(tournamentId)
+                        .collection("participants")
+                        .whereEqualTo("imageHash", imageHash)
+                        .get()
+                        .await()
+                    val duplicateDoc = participantsSnap.documents.firstOrNull { it.id != uid }
+                    if (duplicateDoc != null) {
+                        return Result.failure(IllegalStateException("Duplicate image detected. This screenshot has already been submitted by another user."))
+                    }
+                } catch (e: IllegalStateException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Duplicate image hash check warning: ${e.message}")
+                }
+            }
+
+            var uploadedUrl: String? = null
+            if (imageUri != null) {
+                try {
+                    val storage = FirebaseStorage.getInstance()
+                    val ref = storage.reference.child("match_results/$tournamentId/${uid}_${System.currentTimeMillis()}.jpg")
+                    ref.putFile(imageUri).await()
+                    uploadedUrl = ref.downloadUrl.await().toString()
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Firebase Storage upload fallback to Uri string: ${e.message}")
+                    uploadedUrl = imageUri.toString()
+                }
+            }
+
+            val updates = mapOf(
+                "kills" to kills,
+                "rank" to rank,
+                "resultImageUrl" to (uploadedUrl ?: ""),
+                "imageHash" to imageHash,
+                "submissionStatus" to "pending",
+                "submittedAt" to FieldValue.serverTimestamp()
+            )
+
+            // Update user registration
+            val regDocRef = db.collection("users").document(uid).collection("registrations").document(tournamentId)
+            regDocRef.update(updates).await()
+
+            // Update participant in tournament subcollection
+            try {
+                val partDocRef = db.collection("tournaments").document(tournamentId).collection("participants").document(uid)
+                partDocRef.update(updates).await()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Participant update note: ${e.message}")
+            }
+
+            Result.success("Match result submitted! Pending Admin Verification.")
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.UPDATE, "users/$uid/registrations/$tournamentId")
+            Result.failure(e)
+        }
+    }
+
+    // Admin: Review participant result submission (Approve or Reject)
+    suspend fun reviewResultSubmission(
+        tournamentId: String,
+        participant: TournamentParticipant,
+        approved: Boolean,
+        points: Int = 0,
+        prizeWon: Int = 0
+    ): Result<Unit> {
+        val status = if (approved) "approved" else "rejected"
+        if (isGuest()) {
+            guestRegistrationsFlow.value = guestRegistrationsFlow.value.map {
+                if (it.tournamentId == tournamentId && (it.userId == participant.userId || it.userId == "player_guest")) {
+                    it.copy(submissionStatus = status)
+                } else it
+            }
+            if (approved) {
+                val matchResult = MatchResult(
+                    id = participant.userId.ifBlank { "guest_res" },
+                    tournamentId = tournamentId,
+                    rank = participant.rank,
+                    teamName = participant.username.ifBlank { "Player ${participant.inGameUid}" },
+                    playerName = "${participant.username} (${participant.inGameUid})",
+                    kills = participant.kills,
+                    points = if (points > 0) points else participant.kills * 10,
+                    prizeWon = prizeWon
+                )
+                saveMatchResult(tournamentId, matchResult)
+            }
+            return Result.success(Unit)
+        }
+
+        return try {
+            val updates = mapOf<String, Any>(
+                "submissionStatus" to status
+            )
+
+            // 1. Update participant in tournament
+            try {
+                db.collection("tournaments").document(tournamentId)
+                    .collection("participants").document(participant.userId)
+                    .update(updates).await()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Participant status update warning: ${e.message}")
+            }
+
+            // 2. Update registration in user doc
+            try {
+                db.collection("users").document(participant.userId)
+                    .collection("registrations").document(tournamentId)
+                    .update(updates).await()
+            } catch (e: Throwable) {
+                Log.w(TAG, "User registration status update warning: ${e.message}")
+            }
+
+            // 3. If approved, publish to leaderboard / results
+            if (approved) {
+                val calcPoints = if (points > 0) points else participant.kills * 10
+                val matchResult = MatchResult(
+                    id = participant.userId,
+                    tournamentId = tournamentId,
+                    rank = participant.rank,
+                    teamName = participant.username.ifBlank { "Player ${participant.inGameUid}" },
+                    playerName = "${participant.username} (${participant.inGameUid})",
+                    kills = participant.kills,
+                    points = calcPoints,
+                    prizeWon = prizeWon
+                )
+                saveMatchResult(tournamentId, matchResult)
+            }
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.UPDATE, "tournaments/$tournamentId/participants/${participant.userId}")
+            Result.failure(e)
+        }
+    }
 }
+
+

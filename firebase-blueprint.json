@@ -64,10 +64,15 @@
         "tournamentId": { "type": "string" },
         "tournamentTitle": { "type": "string" },
         "userId": { "type": "string" },
+        "inGameUid": { "type": "string" },
         "entryFee": { "type": "integer" },
         "roomId": { "type": "string" },
         "roomPassword": { "type": "string" },
-        "slotNumber": { "type": "integer" }
+        "slotNumber": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "rank": { "type": "integer" },
+        "resultImageUrl": { "type": "string" },
+        "submissionStatus": { "type": "string", "enum": ["none", "pending", "approved", "rejected"] }
       },
       "required": ["registrationId", "tournamentId", "userId", "entryFee"]
     },

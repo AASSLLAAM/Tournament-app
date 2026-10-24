@@ -27,8 +27,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lock
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.model.TournamentParticipant
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
@@ -103,16 +113,25 @@ fun AdminScreen(
 
     var showCreateTournamentDialog by remember { mutableStateOf(false) }
     var tournamentToDeclareWinner by remember { mutableStateOf<Tournament?>(null) }
+    var tournamentToUpdateRoom by remember { mutableStateOf<Tournament?>(null) }
+    var tournamentToViewParticipants by remember { mutableStateOf<Tournament?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
+    val anyDialogOpen = showCreateTournamentDialog ||
+            tournamentToDeclareWinner != null ||
+            tournamentToUpdateRoom != null ||
+            tournamentToViewParticipants != null
+
     // Physical back button handler: close open dialogs first
-    BackHandler(enabled = showCreateTournamentDialog || tournamentToDeclareWinner != null) {
+    BackHandler(enabled = anyDialogOpen) {
         showCreateTournamentDialog = false
         tournamentToDeclareWinner = null
+        tournamentToUpdateRoom = null
+        tournamentToViewParticipants = null
     }
 
     // Physical back button handler: return to previous screen
-    BackHandler(enabled = !showCreateTournamentDialog && tournamentToDeclareWinner == null) {
+    BackHandler(enabled = !anyDialogOpen) {
         onBack()
     }
 
@@ -539,7 +558,9 @@ fun AdminScreen(
             AdminTournamentManageCard(
                 tournament = tournament,
                 onDeclareWinnerClick = { tournamentToDeclareWinner = tournament },
-                onManageStatsClick = { onNavigateToMatchDetails(tournament) }
+                onManageStatsClick = { onNavigateToMatchDetails(tournament) },
+                onUpdateRoomClick = { tournamentToUpdateRoom = tournament },
+                onViewParticipantsClick = { tournamentToViewParticipants = tournament }
             )
         }
     }
@@ -621,13 +642,42 @@ fun AdminScreen(
             }
         )
     }
+
+    // Dialog: Update Custom Room ID & Password
+    tournamentToUpdateRoom?.let { tour ->
+        UpdateRoomDialog(
+            tournament = tour,
+            isLoading = isAdminLoading,
+            onDismiss = { tournamentToUpdateRoom = null },
+            onSave = { roomId, password ->
+                viewModel.updateRoomCredentials(
+                    tournamentId = tour.id,
+                    roomId = roomId,
+                    roomPassword = password,
+                    onSuccess = { tournamentToUpdateRoom = null }
+                )
+            }
+        )
+    }
+
+    // Dialog: View Registered Players and In-Game UIDs
+    tournamentToViewParticipants?.let { tour ->
+        ViewParticipantsDialog(
+            tournament = tour,
+            viewModel = viewModel,
+            onDismiss = { tournamentToViewParticipants = null }
+        )
+    }
 }
+
 
 @Composable
 fun AdminTournamentManageCard(
     tournament: Tournament,
     onDeclareWinnerClick: () -> Unit,
-    onManageStatsClick: () -> Unit = {}
+    onManageStatsClick: () -> Unit = {},
+    onUpdateRoomClick: () -> Unit = {},
+    onViewParticipantsClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -690,6 +740,65 @@ fun AdminTournamentManageCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // Room Credentials Box
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = CardNavyElevated,
+                border = BorderStroke(1.dp, BorderCyan.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Custom Room Credentials:", color = TextMuted, fontSize = 10.sp)
+                        Text(
+                            text = if (!tournament.roomId.isNullOrBlank()) "Room: ${tournament.roomId} | Pass: ${tournament.roomPassword ?: "----"}" else "Awaiting Host (Not Set)",
+                            color = if (!tournament.roomId.isNullOrBlank()) EmeraldGreen else GoldAccent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(
+                        onClick = onUpdateRoomClick,
+                        modifier = Modifier.size(30.dp).testTag("admin_edit_room_btn_${tournament.id}")
+                    ) {
+                        Icon(imageVector = Icons.Default.MeetingRoom, contentDescription = "Edit Room", tint = NeonCyan, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Buttons: Update Room & View UIDs
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onUpdateRoomClick,
+                    modifier = Modifier.weight(1f).testTag("admin_update_room_btn_${tournament.id}"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black)
+                ) {
+                    Icon(imageVector = Icons.Default.MeetingRoom, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Set Room ID", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = onViewParticipantsClick,
+                    modifier = Modifier.weight(1f).testTag("admin_view_uids_btn_${tournament.id}"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen, contentColor = Color.Black)
+                ) {
+                    Icon(imageVector = Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Player UIDs", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             if (tournament.winnerName != null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -740,6 +849,331 @@ fun AdminTournamentManageCard(
         }
     }
 }
+
+@Composable
+fun UpdateRoomDialog(
+    tournament: Tournament,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (roomId: String, password: String) -> Unit
+) {
+    var roomId by remember { mutableStateOf(tournament.roomId ?: "") }
+    var roomPassword by remember { mutableStateOf(tournament.roomPassword ?: "") }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Text("Update Custom Room Credentials", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Tournament: ${tournament.title}",
+                    color = NeonCyan,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Entered Room ID & Password will be instantly displayed to all registered players on their My Matches screen.",
+                    color = TextMuted,
+                    fontSize = 11.sp
+                )
+
+                OutlinedTextField(
+                    value = roomId,
+                    onValueChange = { roomId = it },
+                    label = { Text("Room ID") },
+                    placeholder = { Text("e.g. 84920491") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("admin_input_room_id"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = BorderMuted,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+
+                OutlinedTextField(
+                    value = roomPassword,
+                    onValueChange = { roomPassword = it },
+                    label = { Text("Room Password") },
+                    placeholder = { Text("e.g. 1234") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("admin_input_room_password"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = BorderMuted,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(roomId.trim(), roomPassword.trim()) },
+                enabled = !isLoading && roomId.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
+                modifier = Modifier.testTag("admin_confirm_room_update_btn")
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                } else {
+                    Text("Broadcast to Players", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading,
+                modifier = Modifier.testTag("admin_cancel_room_update_btn")
+            ) {
+                Text("Cancel", color = TextSecondary)
+            }
+        },
+        containerColor = CardNavy
+    )
+}
+
+@Composable
+fun ViewParticipantsDialog(
+    tournament: Tournament,
+    viewModel: EsportsViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val participantsFlow = remember(tournament.id) { viewModel.getTournamentParticipants(tournament.id) }
+    val participants by participantsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Registered Players & UIDs", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = CardNavyElevated
+                ) {
+                    Text(
+                        text = "${participants.size} Players",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+                Text(
+                    text = "Verify player In-Game UIDs inside match lobby:",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (participants.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "No players registered yet.\nUIDs will appear here as users join.",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(participants, key = { it.userId }) { p ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = CardNavyElevated,
+                                border = BorderStroke(1.dp, if (p.submissionStatus == "pending") GoldAccent else BorderCyan.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth().testTag("participant_row_${p.userId}")
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp).fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Slot #${p.slotNumber} • ${p.username}",
+                                                color = TextPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = "UID: ",
+                                                    color = TextMuted,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = p.inGameUid.ifBlank { "N/A" },
+                                                    color = GoldAccent,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        }
+
+                                        if (p.inGameUid.isNotBlank()) {
+                                            IconButton(
+                                                onClick = {
+                                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                    val clip = ClipData.newPlainText("InGame UID", p.inGameUid)
+                                                    clipboard.setPrimaryClip(clip)
+                                                    Toast.makeText(context, "UID ${p.inGameUid} copied!", Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.size(32.dp).testTag("copy_participant_uid_${p.userId}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ContentCopy,
+                                                    contentDescription = "Copy UID",
+                                                    tint = NeonCyan,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Result submission details (OCR screenshot & verification)
+                                    if (p.submissionStatus.isNotBlank() && p.submissionStatus != "none") {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = when (p.submissionStatus) {
+                                                "pending" -> GoldAccent.copy(alpha = 0.12f)
+                                                "approved" -> EmeraldGreen.copy(alpha = 0.12f)
+                                                else -> CrimsonRed.copy(alpha = 0.12f)
+                                            },
+                                            border = BorderStroke(1.dp, when (p.submissionStatus) {
+                                                "pending" -> GoldAccent.copy(alpha = 0.5f)
+                                                "approved" -> EmeraldGreen.copy(alpha = 0.5f)
+                                                else -> CrimsonRed.copy(alpha = 0.5f)
+                                            }),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(8.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "Status: ${p.submissionStatus.uppercase()}",
+                                                        color = when (p.submissionStatus) {
+                                                            "pending" -> GoldAccent
+                                                            "approved" -> EmeraldGreen
+                                                            else -> CrimsonRed
+                                                        },
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    )
+                                                    Text(
+                                                        text = "Claimed: ${p.kills} Kills • Rank #${p.rank}",
+                                                        color = TextPrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+
+                                                if (!p.resultImageUrl.isNullOrBlank()) {
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        modifier = Modifier.fillMaxWidth().height(120.dp)
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = p.resultImageUrl,
+                                                            contentDescription = "Scoreboard Screenshot",
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+                                                    }
+                                                }
+
+                                                if (p.submissionStatus == "pending") {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Button(
+                                                            onClick = {
+                                                                viewModel.reviewResultSubmission(
+                                                                    tournamentId = tournament.id,
+                                                                    participant = p,
+                                                                    approved = true,
+                                                                    points = p.kills * 10,
+                                                                    prizeWon = if (p.rank == 1) tournament.prizePool else 0
+                                                                )
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen, contentColor = Color.Black),
+                                                            modifier = Modifier.weight(1f).testTag("approve_btn_${p.userId}"),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("Approve", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                        }
+
+                                                        OutlinedButton(
+                                                            onClick = {
+                                                                viewModel.reviewResultSubmission(
+                                                                    tournamentId = tournament.id,
+                                                                    participant = p,
+                                                                    approved = false
+                                                                )
+                                                            },
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonRed),
+                                                            border = BorderStroke(1.dp, CrimsonRed),
+                                                            modifier = Modifier.weight(1f).testTag("reject_btn_${p.userId}"),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("Reject", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
+                modifier = Modifier.testTag("close_participants_btn")
+            ) {
+                Text("Close", fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = CardNavy
+    )
+}
+
 
 @Composable
 fun CreateTournamentDialog(
