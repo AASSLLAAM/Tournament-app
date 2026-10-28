@@ -539,6 +539,11 @@ fun HomeScreen(
                     Text("• Organizer: ${item.organizer}", color = TextSecondary, fontSize = 13.sp)
                 }
             },
+            confirmButton = {
+                TextButton(onClick = { tournamentDetail = null }) {
+                    Text("Close")
+                }
+            },
             containerColor = CardNavy
         )
     }
