@@ -246,7 +246,8 @@ fun HomeScreen(
         }
     }
 
-    tournamentToJoin?.let { item ->
+    if (tournamentToJoin != null) {
+        val item = tournamentToJoin!!
         AlertDialog(
             onDismissRequest = {
                 if (!isJoinLoading) {
@@ -511,7 +512,8 @@ fun HomeScreen(
         )
     }
 
-    tournamentDetail?.let { item ->
+    if (tournamentDetail != null) {
+        val item = tournamentDetail!!
         AlertDialog(
             onDismissRequest = { tournamentDetail = null },
             title = {
