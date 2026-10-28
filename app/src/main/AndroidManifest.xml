@@ -14,7 +14,7 @@
 
     <application
         android:allowBackup="true"
-        android:name="com.aistudio.worldwar.kxmg.WorldWarApplication"
+        android:name="com.example.WorldWarApplication"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/worldwar_icon"
