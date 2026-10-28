@@ -22,6 +22,7 @@ data class Tournament(
     val title: String = "",
     val gameCategoryName: String = "FREE_FIRE",
     val map: String = "Bermuda",
+    val matchType: String = "Squad",
     val formatName: String = "SQUAD",
     val scheduleTime: String = "07:00 PM",
     val scheduleDate: String = "Today",
@@ -63,10 +64,16 @@ data class Tournament(
         }
 
     val format: MatchFormat
-        get() = try {
-            MatchFormat.valueOf(formatName)
-        } catch (_: Exception) {
-            MatchFormat.SQUAD
+        get() {
+            val candidate = matchType.trim().uppercase()
+            try {
+                return MatchFormat.valueOf(candidate)
+            } catch (_: Exception) {}
+            return try {
+                MatchFormat.valueOf(formatName.trim().uppercase())
+            } catch (_: Exception) {
+                MatchFormat.SQUAD
+            }
         }
 
     val isFull: Boolean get() = filledSlots >= totalSlots

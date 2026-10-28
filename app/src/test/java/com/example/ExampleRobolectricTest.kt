@@ -48,4 +48,19 @@ class ExampleRobolectricTest {
         assertEquals("pay_test_12345", transaction.paymentId)
         assertEquals("Razorpay Standard", transaction.gateway)
     }
+
+    @Test
+    fun `tournament matchType defaults to Squad and maps format properly`() {
+        val defaultTour = com.example.model.Tournament(title = "Default Match")
+        assertEquals("Squad", defaultTour.matchType)
+        assertEquals(com.example.model.MatchFormat.SQUAD, defaultTour.format)
+
+        val soloTour = com.example.model.Tournament(title = "Solo Showdown", matchType = "Solo")
+        assertEquals("Solo", soloTour.matchType)
+        assertEquals(com.example.model.MatchFormat.SOLO, soloTour.format)
+
+        val duoTour = com.example.model.Tournament(title = "Duo Clash", matchType = "Duo")
+        assertEquals("Duo", duoTour.matchType)
+        assertEquals(com.example.model.MatchFormat.DUO, duoTour.format)
+    }
 }

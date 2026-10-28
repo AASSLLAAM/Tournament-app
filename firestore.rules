@@ -67,7 +67,7 @@ service cloud.firestore {
          incoming().diff(existing()).affectedKeys().hasOnly(['filledSlots', 'statusText']) &&
          incoming().filledSlots >= existing().filledSlots) ||
         // Only Admin can declare winner or update tournament details (including Room ID and Room Password)
-        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['winnerName', 'statusText', 'title', 'map', 'scheduleTime', 'scheduleDate', 'entryFee', 'prizePool', 'perKill', 'totalSlots', 'filledSlots', 'bannerType', 'serverType', 'organizer', 'declaredWinnerAt', 'roomId', 'roomPassword']))
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['winnerName', 'statusText', 'title', 'map', 'matchType', 'formatName', 'scheduleTime', 'scheduleDate', 'entryFee', 'prizePool', 'perKill', 'totalSlots', 'filledSlots', 'bannerType', 'serverType', 'organizer', 'declaredWinnerAt', 'roomId', 'roomPassword']))
       );
 
       allow delete: if isAdmin();

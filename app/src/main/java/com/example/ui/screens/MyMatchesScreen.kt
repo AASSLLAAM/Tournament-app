@@ -26,9 +26,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import android.provider.MediaStore
 import android.util.Log
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
@@ -74,8 +77,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -713,6 +718,42 @@ fun MyMatchesScreen(
                     }
 
                     item {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = CardNavyElevated,
+                            border = BorderStroke(1.dp, BorderCyan.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = verifiedUidSummary.ifBlank { "In-Game UID Verified" },
+                                        color = NeonCyan,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                if (pendingScreenshotHash.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "SHA-256: ${pendingScreenshotHash.take(16)}...",
+                                        color = TextMuted,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -750,11 +791,31 @@ fun MyMatchesScreen(
                     }
 
                     item {
-                        Text(
-                            text = "Screenshot will be uploaded to Firebase Storage and submitted as 'pending' for Admin verification.",
-                            color = TextMuted,
-                            fontSize = 11.sp
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = CardNavyElevated,
+                            border = BorderStroke(1.dp, BorderMuted),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = GoldAccent,
+                                    modifier = Modifier.size(16.dp).padding(top = 1.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Anti-Cheat Policy: Result is submitted with status 'pending' (Pending Admin Verification). Kills and rank will only appear on the public leaderboard after manual Admin approval.",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -770,15 +831,21 @@ fun MyMatchesScreen(
                                 kills = finalKills,
                                 rank = finalRank,
                                 imageUri = pendingScreenshotUri,
+                                imageHash = pendingScreenshotHash,
                                 onSuccess = {
                                     isSubmitting = false
                                     showConfirmDialog = false
                                     selectedMatchForUpload = null
                                     pendingScreenshotUri = null
+                                    pendingScreenshotHash = ""
                                     Toast.makeText(context, "Submitted! Status: Pending Admin Verification.", Toast.LENGTH_SHORT).show()
                                 },
-                                onError = {
+                                onError = { errorMsg ->
                                     isSubmitting = false
+                                    showConfirmDialog = false
+                                    antiCheatErrorMessage = errorMsg
+                                    showAntiCheatDialog = true
+                                    Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                                 }
                             )
                         } else {
@@ -786,6 +853,7 @@ fun MyMatchesScreen(
                             showConfirmDialog = false
                             selectedMatchForUpload = null
                             pendingScreenshotUri = null
+                            pendingScreenshotHash = ""
                         }
                     },
                     enabled = !isSubmitting,
@@ -805,6 +873,7 @@ fun MyMatchesScreen(
                         showConfirmDialog = false
                         selectedMatchForUpload = null
                         pendingScreenshotUri = null
+                        pendingScreenshotHash = ""
                     },
                     enabled = !isSubmitting
                 ) {
@@ -812,6 +881,91 @@ fun MyMatchesScreen(
                 }
             },
             containerColor = CardNavy
+        )
+    }
+
+    // Anti-Cheat Security Dialog
+    if (showAntiCheatDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAntiCheatDialog = false
+                antiCheatErrorMessage = ""
+            },
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(CrimsonRed.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = "Anti-Cheat Alert",
+                        tint = CrimsonRed,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            },
+            title = {
+                Text(
+                    text = "Anti-Cheat Alert",
+                    color = CrimsonRed,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = CrimsonRed.copy(alpha = 0.1f),
+                        border = BorderStroke(1.dp, CrimsonRed.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = antiCheatErrorMessage.ifBlank { "UID mismatch. Fake screenshot detected." },
+                            color = Color(0xFFFF8A80),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                    Text(
+                        text = "To protect fair tournament play, screenshots must display your registered In-Game ID and valid match schedule. Mismatched UIDs, duplicate screenshots from other players, or fake images are immediately rejected.",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAntiCheatDialog = false
+                        antiCheatErrorMessage = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CrimsonRed,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("anti_cheat_dismiss_btn")
+                ) {
+                    Text("Understood", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = CardNavy,
+            modifier = Modifier.testTag("anti_cheat_error_dialog")
         )
     }
 }
@@ -945,7 +1099,7 @@ fun JoinedMatchCard(
                 )
 
                 Text(
-                    text = "${match.gameCategory.displayName} • ${match.format.label} • ${match.map}",
+                    text = "${match.gameCategory.displayName} • ${match.map} • ${match.matchType.ifBlank { match.format.label }}",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )

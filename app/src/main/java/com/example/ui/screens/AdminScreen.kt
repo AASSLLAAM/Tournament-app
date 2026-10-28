@@ -14,14 +14,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -61,6 +68,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import android.widget.Toast
+import com.example.data.EsportsRepository
+import kotlinx.coroutines.tasks.await
 import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,6 +89,7 @@ import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.Tournament
@@ -144,11 +154,18 @@ fun AdminScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(DarkNavy)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
-                modifier = Modifier.fillMaxWidth().testTag("admin_access_denied_card"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+                    .testTag("admin_access_denied_card"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = CardNavy),
                 border = BorderStroke(1.dp, CrimsonRed.copy(alpha = 0.5f))
@@ -205,6 +222,8 @@ fun AdminScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
             .testTag("admin_screen")
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
@@ -279,6 +298,7 @@ fun AdminScreen(
             var inlineTitle by remember { mutableStateOf("") }
             var inlineGame by remember { mutableStateOf("Free Fire MAX") }
             var inlineMap by remember { mutableStateOf("Bermuda") }
+            var inlineMatchType by remember { mutableStateOf("Squad") }
             var inlineFormat by remember { mutableStateOf("Squad") }
             var inlineDate by remember { mutableStateOf("Today") }
             var inlineTime by remember { mutableStateOf("09:00 PM") }
@@ -368,6 +388,51 @@ fun AdminScreen(
                                         modifier = Modifier.padding(vertical = 8.dp),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                     )
+                                }
+                            }
+                        }
+
+                        // Match Type Selection Row (Solo, Duo, Squad)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Match Type",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("Solo", "Duo", "Squad").forEach { type ->
+                                    val isSelected = inlineMatchType.equals(type, ignoreCase = true)
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                inlineMatchType = type
+                                                inlineFormat = type
+                                            }
+                                            .testTag("match_type_chip_${type.lowercase()}"),
+                                        color = if (isSelected) NeonCyan else CardNavyElevated,
+                                        border = BorderStroke(1.dp, if (isSelected) NeonCyan else BorderMuted),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().padding(vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = type,
+                                                color = if (isSelected) Color.Black else TextSecondary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -474,7 +539,8 @@ fun AdminScreen(
                                                 entryFee = entry,
                                                 prizePool = prize,
                                                 perKill = kill,
-                                                totalSlots = slots
+                                                totalSlots = slots,
+                                                matchType = inlineMatchType
                                             )
                                             if (result.isSuccess) {
                                                 Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
@@ -601,7 +667,8 @@ fun AdminScreen(
                             entryFee = entryFee,
                             prizePool = prize,
                             perKill = perKill,
-                            totalSlots = slots
+                            totalSlots = slots,
+                            matchType = format
                         )
                         if (result.isSuccess) {
                             Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
@@ -647,14 +714,12 @@ fun AdminScreen(
     tournamentToUpdateRoom?.let { tour ->
         UpdateRoomDialog(
             tournament = tour,
-            isLoading = isAdminLoading,
             onDismiss = { tournamentToUpdateRoom = null },
             onSave = { roomId, password ->
                 viewModel.updateRoomCredentials(
                     tournamentId = tour.id,
                     roomId = roomId,
-                    roomPassword = password,
-                    onSuccess = { tournamentToUpdateRoom = null }
+                    roomPassword = password
                 )
             }
         )
@@ -699,7 +764,7 @@ fun AdminTournamentManageCard(
                     border = BorderStroke(1.dp, BorderCyan.copy(alpha = 0.5f))
                 ) {
                     Text(
-                        text = "${tournament.gameCategory.displayName} • ${tournament.map}",
+                        text = "${tournament.gameCategory.displayName} • ${tournament.map} • ${tournament.matchType.ifBlank { tournament.format.label }}",
                         color = NeonCyan,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -727,7 +792,9 @@ fun AdminTournamentManageCard(
                 text = tournament.title,
                 color = TextPrimary,
                 fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -735,7 +802,9 @@ fun AdminTournamentManageCard(
             Text(
                 text = "Entry: ₹${tournament.entryFee} | Prize: ₹${tournament.prizePool} | Time: ${tournament.scheduleDate}, ${tournament.scheduleTime}",
                 color = TextMuted,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -853,20 +922,28 @@ fun AdminTournamentManageCard(
 @Composable
 fun UpdateRoomDialog(
     tournament: Tournament,
-    isLoading: Boolean,
+    isLoading: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (roomId: String, password: String) -> Unit
+    onSave: (roomId: String, password: String) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(isLoading) }
     var roomId by remember { mutableStateOf(tournament.roomId ?: "") }
     var roomPassword by remember { mutableStateOf(tournament.roomPassword ?: "") }
 
     AlertDialog(
-        onDismissRequest = { if (!isLoading) onDismiss() },
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = {
             Text("Update Custom Room Credentials", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
                     text = "Tournament: ${tournament.title}",
                     color = NeonCyan,
@@ -912,22 +989,84 @@ fun UpdateRoomDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(roomId.trim(), roomPassword.trim()) },
-                enabled = !isLoading && roomId.isNotBlank(),
+                onClick = {
+                    val trimmedRoom = roomId.trim()
+                    val trimmedPass = roomPassword.trim()
+                    if (trimmedRoom.isBlank()) {
+                        Toast.makeText(context, "Room ID cannot be empty", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    if (isSaving) return@Button
+
+                    isSaving = true
+                    coroutineScope.launch {
+                        try {
+                            val db = EsportsRepository.createFirestoreInstance(context)
+                            val tourDocRef = db.collection("tournaments").document(tournament.id)
+                            
+                            val snapshot = try { tourDocRef.get().await() } catch (_: Throwable) { null }
+                            if (snapshot != null && snapshot.exists()) {
+                                tourDocRef.update(
+                                    mapOf(
+                                        "roomId" to trimmedRoom,
+                                        "roomPassword" to trimmedPass
+                                    )
+                                ).await()
+                            } else {
+                                tourDocRef.set(
+                                    mapOf(
+                                        "id" to tournament.id,
+                                        "title" to tournament.title,
+                                        "gameCategoryName" to tournament.gameCategoryName,
+                                        "map" to tournament.map,
+                                        "matchType" to tournament.matchType,
+                                        "formatName" to tournament.formatName,
+                                        "scheduleTime" to tournament.scheduleTime,
+                                        "scheduleDate" to tournament.scheduleDate,
+                                        "entryFee" to tournament.entryFee,
+                                        "prizePool" to tournament.prizePool,
+                                        "perKill" to tournament.perKill,
+                                        "totalSlots" to tournament.totalSlots,
+                                        "filledSlots" to tournament.filledSlots,
+                                        "bannerType" to tournament.bannerType,
+                                        "serverType" to tournament.serverType,
+                                        "organizer" to tournament.organizer,
+                                        "statusText" to tournament.statusText,
+                                        "roomId" to trimmedRoom,
+                                        "roomPassword" to trimmedPass
+                                    )
+                                ).await()
+                            }
+
+                            Toast.makeText(context, "Room credentials updated successfully!", Toast.LENGTH_SHORT).show()
+                            onSave(trimmedRoom, trimmedPass)
+                            onDismiss()
+                        } catch (e: Exception) {
+                            val errorMsg = e.localizedMessage ?: e.message ?: "Failed to update room details"
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                        } catch (t: Throwable) {
+                            val errorMsg = t.localizedMessage ?: t.message ?: "Failed to update room details"
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                },
+                enabled = !isSaving && roomId.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
                 modifier = Modifier.testTag("admin_confirm_room_update_btn")
             ) {
-                if (isLoading) {
+                if (isSaving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
                 } else {
-                    Text("Broadcast to Players", fontWeight = FontWeight.Bold)
+                    Text("Confirm", fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isLoading,
+                enabled = !isSaving,
                 modifier = Modifier.testTag("admin_cancel_room_update_btn")
             ) {
                 Text("Cancel", color = TextSecondary)
@@ -1105,6 +1244,15 @@ fun ViewParticipantsDialog(
                                                     }
                                                 }
 
+                                                if (p.imageHash.isNotBlank()) {
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = "Anti-Cheat SHA-256: ${p.imageHash.take(16)}... (Verified)",
+                                                        color = TextMuted,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+
                                                 if (p.submissionStatus == "pending") {
                                                     Spacer(modifier = Modifier.height(8.dp))
                                                     Row(
@@ -1244,6 +1392,48 @@ fun CreateTournamentDialog(
                                     modifier = Modifier.padding(vertical = 10.dp),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Match Type",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Solo", "Duo", "Squad").forEach { type ->
+                                val isSelected = matchFormat.equals(type, ignoreCase = true)
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            matchFormat = type
+                                        }
+                                        .testTag("dialog_match_type_${type.lowercase()}"),
+                                    color = if (isSelected) NeonCyan else CardNavyElevated,
+                                    border = BorderStroke(1.dp, if (isSelected) NeonCyan else BorderMuted),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = type,
+                                            color = if (isSelected) Color.Black else TextSecondary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1402,7 +1592,11 @@ fun DeclareWinnerDialog(
             Text("Declare Match Winner", color = TextPrimary, fontWeight = FontWeight.Bold)
         },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = tournament.title,
                     color = NeonCyan,

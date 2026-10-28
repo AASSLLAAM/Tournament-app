@@ -285,7 +285,8 @@ class EsportsViewModel(
         entryFee: Int,
         prizePool: Int,
         perKill: Int,
-        totalSlots: Int
+        totalSlots: Int,
+        matchType: String = format
     ): Result<String> {
         _isAdminActionLoading.value = true
         return try {
@@ -299,7 +300,8 @@ class EsportsViewModel(
                 entryFee = entryFee,
                 prizePool = prizePool,
                 perKill = perKill,
-                totalSlots = totalSlots
+                totalSlots = totalSlots,
+                matchType = matchType
             )
             if (result.isSuccess) {
                 _snackbarMessage.value = "Tournament '$title' published to Firestore successfully!"
@@ -328,6 +330,7 @@ class EsportsViewModel(
         prizePool: Int,
         perKill: Int,
         totalSlots: Int,
+        matchType: String = format,
         onSuccess: () -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
@@ -344,7 +347,8 @@ class EsportsViewModel(
                     entryFee = entryFee,
                     prizePool = prizePool,
                     perKill = perKill,
-                    totalSlots = totalSlots
+                    totalSlots = totalSlots,
+                    matchType = matchType
                 )
                 if (result.isSuccess) {
                     _snackbarMessage.value = "Tournament '$title' published to Firestore successfully!"

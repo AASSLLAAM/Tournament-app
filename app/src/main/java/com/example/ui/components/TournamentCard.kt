@@ -153,7 +153,7 @@ fun TournamentCard(
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
                     Text(
-                        text = "${tournament.format.label} • ${tournament.map}",
+                        text = "${tournament.gameCategory.displayName} • ${tournament.map} • ${tournament.matchType.ifBlank { tournament.format.label }}",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -194,7 +194,16 @@ fun TournamentCard(
                     maxLines = 1
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${tournament.gameCategory.displayName} • ${tournament.map} • ${tournament.matchType.ifBlank { tournament.format.label }}",
+                    color = NeonCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Stats Row: Prize Pool, Per Kill, Entry Fee
                 Row(

@@ -37,6 +37,7 @@ val DEFAULT_TOURNAMENTS = listOf(
         title = "Free Fire Pro Scrims Season 4",
         gameCategoryName = "FREE_FIRE",
         map = "Bermuda",
+        matchType = "Squad",
         formatName = "SQUAD",
         scheduleTime = "06:30 PM",
         scheduleDate = "Today",
@@ -55,6 +56,7 @@ val DEFAULT_TOURNAMENTS = listOf(
         title = "BGMI Masters Mega Showdown",
         gameCategoryName = "BGMI",
         map = "Erangel",
+        matchType = "Squad",
         formatName = "SQUAD",
         scheduleTime = "08:00 PM",
         scheduleDate = "Today",
@@ -73,6 +75,7 @@ val DEFAULT_TOURNAMENTS = listOf(
         title = "Free Fire Solo Headshot Championship",
         gameCategoryName = "FREE_FIRE",
         map = "Purgatory",
+        matchType = "Solo",
         formatName = "SOLO",
         scheduleTime = "09:15 PM",
         scheduleDate = "Today",
@@ -492,6 +495,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                             "title" to tour.title,
                             "gameCategoryName" to tour.gameCategoryName,
                             "map" to tour.map,
+                            "matchType" to tour.matchType,
                             "formatName" to tour.formatName,
                             "scheduleTime" to tour.scheduleTime,
                             "scheduleDate" to tour.scheduleDate,
@@ -675,7 +679,8 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         entryFee: Int,
         prizePool: Int,
         perKill: Int,
-        totalSlots: Int
+        totalSlots: Int,
+        matchType: String = format
     ): Result<String> {
         val currentUser = try {
             auth?.currentUser
@@ -695,6 +700,7 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 "title" to title,
                 "gameCategoryName" to gameCategory,
                 "map" to map,
+                "matchType" to matchType,
                 "formatName" to format,
                 "scheduleTime" to scheduleTime,
                 "scheduleDate" to scheduleDate,

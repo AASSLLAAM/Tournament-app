@@ -265,7 +265,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Format: ${item.format.label} • Map: ${item.map}",
+                        text = "${item.gameCategory.displayName} • ${item.map} • ${item.matchType.ifBlank { item.format.label }}",
                         color = TextSecondary,
                         fontSize = 13.sp
                     )
@@ -473,7 +473,7 @@ fun HomeScreen(
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        text = "Game: ${item.gameCategory.displayName} (${item.format.label})",
+                        text = "${item.gameCategory.displayName} • ${item.map} • ${item.matchType.ifBlank { item.format.label }}",
                         color = NeonCyan,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
