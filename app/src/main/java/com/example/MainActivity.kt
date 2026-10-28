@@ -1,6 +1,7 @@
-package com.example
+ package com.example
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -8,14 +9,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,6 +20,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -37,10 +35,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -55,17 +53,14 @@ import com.example.ui.screens.MatchDetailsScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.WalletScreen
-import com.example.ui.theme.WorldWarTheme
 import com.example.ui.theme.CardNavy
 import com.example.ui.theme.DarkNavy
 import com.example.ui.theme.GoldAccent
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WorldWarTheme
 import com.example.viewmodel.EsportsViewModel
-import android.util.Log
-import androidx.compose.material3.Surface
-import androidx.lifecycle.lifecycleScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -76,6 +71,7 @@ import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
@@ -156,7 +152,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 put("name", "WorldWar Esports")
                 put("description", "Wallet Recharge: ₹$amount")
                 put("currency", "INR")
-                put("amount", amount * 100) // in paise (e.g. 100 INR = 10000 paise)
+                put("amount", amount * 100)
                 put("theme.color", "#00E5FF")
 
                 val prefill = JSONObject().apply {
@@ -242,7 +238,6 @@ fun AppRootContent(
 
     val user = currentUser
     if (user == null && !isGuestMode) {
-        // Auth Gated Sign-In Screen
         AuthScreen(
             onAuthSuccess = {
                 try {
@@ -256,7 +251,6 @@ fun AppRootContent(
                 .safeDrawingPadding()
         )
     } else {
-        // Authenticated Session or Guest: Safely initialize repository
         val repository = remember {
             try {
                 EsportsRepository(context)
@@ -295,7 +289,6 @@ fun AppRootContent(
             onDispose {}
         }
 
-        // Ensure user document exists with initial balance in Firestore
         LaunchedEffect(user?.uid) {
             if (user != null) {
                 scope.launch {
@@ -340,14 +333,47 @@ fun MainAppContainer(
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val snackbarMsg by viewModel.snackbarMessage.collectAsStateWithLifecycle()
 
-    // Enforce security: if normal user is somehow on Admin screen, return to Home
-    LaunchedEffect(userProfile.isAdmin, currentScreen) {
-        if (currentScreen == NavScreen.ADMIN && !userProfile.isAdmin) {
+    var isAdminRoleLoading by remember { mutableStateOf(true) }
+    var isAdminVisible by remember { mutableStateOf(false) }
+
+    val currentUserId = try {
+        Firebase.auth.currentUser?.uid
+    } catch (_: Throwable) {
+        null
+    }
+
+    LaunchedEffect(currentUserId) {
+        isAdminRoleLoading = true
+        isAdminVisible = false
+
+        val uid = currentUserId ?: run {
+            isAdminRoleLoading = false
+            return@LaunchedEffect
+        }
+
+        try {
+            val firestore = FirebaseFirestore.getInstance()
+            val doc = firestore
+                .collection("users")
+                .document(uid)
+                .get()
+                .await()
+
+            val role = doc.getString("role")?.trim()?.lowercase() ?: "user"
+            isAdminVisible = role == "admin"
+        } catch (_: Throwable) {
+            isAdminVisible = false
+        } finally {
+            isAdminRoleLoading = false
+        }
+    }
+
+    LaunchedEffect(currentScreen, isAdminVisible, userProfile.isAdmin) {
+        if (currentScreen == NavScreen.ADMIN && !isAdminVisible && !userProfile.isAdmin) {
             currentScreen = NavScreen.HOME
         }
     }
 
-    // Physical back button handler when on secondary screens
     BackHandler(enabled = currentScreen != NavScreen.HOME) {
         if (currentScreen == NavScreen.MATCH_DETAILS) {
             currentScreen = previousScreen
@@ -364,15 +390,22 @@ fun MainAppContainer(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize().imePadding(),
+        modifier = Modifier.fillMaxSize(),
         containerColor = DarkNavy,
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (currentScreen != NavScreen.MATCH_DETAILS) {
-                val visibleScreens = remember(userProfile.isAdmin) {
-                    NavScreen.entries.filter { screen ->
-                        screen.isBottomTab && (screen != NavScreen.ADMIN || userProfile.isAdmin)
+                val visibleScreens = remember(isAdminRoleLoading, isAdminVisible, userProfile.isAdmin) {
+                    if (isAdminRoleLoading) {
+                        NavScreen.entries.filter { screen ->
+                            screen.isBottomTab && screen != NavScreen.ADMIN
+                        }
+                    } else {
+                        NavScreen.entries.filter { screen ->
+                            screen.isBottomTab &&
+                                (screen != NavScreen.ADMIN || isAdminVisible || userProfile.isAdmin)
+                        }
                     }
                 }
 
@@ -410,7 +443,7 @@ fun MainAppContainer(
                                         fontSize = 10.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        softWrap = false
                                     )
                                 },
                                 colors = NavigationBarItemDefaults.colors(
@@ -445,6 +478,7 @@ fun MainAppContainer(
                         .padding(innerPadding)
                 )
             }
+
             NavScreen.WALLET -> {
                 WalletScreen(
                     viewModel = viewModel,
@@ -457,22 +491,24 @@ fun MainAppContainer(
                         .padding(innerPadding)
                 )
             }
+
             NavScreen.MY_MATCHES -> {
                 MyMatchesScreen(
                     viewModel = viewModel,
                     tournaments = tournaments,
-                    onExploreTournaments = { currentScreen = NavScreen.HOME },
                     onNavigateToMatchDetails = { tournament ->
                         previousScreen = currentScreen
                         selectedTournamentForDetails = tournament
                         currentScreen = NavScreen.MATCH_DETAILS
                     },
+                    onExploreTournaments = { currentScreen = NavScreen.HOME },
                     onBack = { currentScreen = NavScreen.HOME },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 )
             }
+
             NavScreen.PROFILE -> {
                 ProfileScreen(
                     userProfile = userProfile,
@@ -486,6 +522,7 @@ fun MainAppContainer(
                         .padding(innerPadding)
                 )
             }
+
             NavScreen.ADMIN -> {
                 AdminScreen(
                     viewModel = viewModel,
@@ -502,6 +539,7 @@ fun MainAppContainer(
                         .padding(innerPadding)
                 )
             }
+
             NavScreen.MATCH_DETAILS -> {
                 val currentTour = selectedTournamentForDetails ?: tournaments.firstOrNull()
                 if (currentTour != null) {
