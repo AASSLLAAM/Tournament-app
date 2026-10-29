@@ -27,8 +27,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Trophy
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
@@ -96,6 +98,7 @@ fun HomeScreen(
     var isJoinLoading by remember { mutableStateOf(false) }
     var joinDialogError by remember { mutableStateOf<String?>(null) }
     var inGameUidInput by remember { mutableStateOf("") }
+    var hasRetry by remember { mutableStateOf(false) }
 
     BackHandler(enabled = tournamentToJoin != null || tournamentDetail != null) {
         if (tournamentToJoin != null) {
@@ -129,6 +132,8 @@ fun HomeScreen(
             }
         }
     }
+
+    val shouldShowComingSoon = filteredTournaments.isEmpty()
 
     LazyColumn(
         modifier = modifier
@@ -201,32 +206,15 @@ fun HomeScreen(
             }
         }
 
-        if (filteredTournaments.isEmpty()) {
+        if (shouldShowComingSoon) {
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardNavy)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = NeonCyan, modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Loading dynamic tournaments from Firestore...",
-                                color = TextSecondary,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-                }
+                ComingSoonTournamentCard(
+                    onRetry = {
+                        hasRetry = true
+                        viewModel.loadTournaments(forceRefresh = true)
+                    },
+                    showRetry = hasRetry
+                )
             }
         } else {
             items(filteredTournaments, key = { it.id }) { tournament ->
@@ -546,6 +534,93 @@ fun HomeScreen(
             },
             containerColor = CardNavy
         )
+    }
+}
+
+@Composable
+private fun ComingSoonTournamentCard(
+    onRetry: () -> Unit,
+    showRetry: Boolean = false
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = CardNavy),
+        border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.7f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF071827),
+                            Color(0xFF0A1D33),
+                            Color(0xFF101F3A)
+                        )
+                    )
+                )
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = NeonCyan.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.8f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Trophy,
+                        contentDescription = "Trophy",
+                        tint = NeonCyan,
+                        modifier = Modifier
+                            .padding(18.dp)
+                            .size(32.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "New Tournaments Are Coming Soon!",
+                    color = NeonCyan,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Admin is setting up exciting new matches. Stay tuned!",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+
+                if (showRetry) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NeonCyan,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Retry",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
