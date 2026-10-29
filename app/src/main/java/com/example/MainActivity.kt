@@ -1,5 +1,6 @@
- package com.example
+package com.example
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -63,6 +64,7 @@ import com.example.ui.theme.WorldWarTheme
 import com.example.viewmodel.EsportsViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -128,6 +130,59 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        validateFirebaseSession()
+    }
+
+    private fun validateFirebaseSession() {
+        lifecycleScope.launch {
+            val auth = try {
+                FirebaseAuth.getInstance()
+            } catch (_: Throwable) {
+                null
+            } ?: return@launch
+
+            val currentUser = try {
+                auth.currentUser
+            } catch (_: Throwable) {
+                null
+            }
+
+            if (currentUser == null) {
+                clearLocalAuthPreferences()
+                return@launch
+            }
+
+            try {
+                currentUser.reload().await()
+            } catch (e: FirebaseAuthInvalidUserException) {
+                Log.w("MainActivity", "Firebase user no longer valid; signing out.", e)
+                try {
+                    auth.signOut()
+                } catch (_: Throwable) {}
+                clearLocalAuthPreferences()
+            } catch (_: Throwable) {
+                // Ignore transient reload failures. If the session is actually invalid, the next
+                // auth state listener update will redirect the user back to the login screen.
+            }
+        }
+    }
+
+    private fun clearLocalAuthPreferences() {
+        val prefsToClear = listOf(
+            getSharedPreferences("worldwar_auth_session", MODE_PRIVATE),
+            getSharedPreferences("worldwar_session_prefs", MODE_PRIVATE),
+            getSharedPreferences("firebase_auth_state", MODE_PRIVATE)
+        )
+
+        prefsToClear.forEach { prefs ->
+            try {
+                prefs.edit().clear().apply()
+            } catch (_: Throwable) {}
         }
     }
 
