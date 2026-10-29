@@ -123,6 +123,14 @@ class EsportsViewModel(
         }
     }
 
+    fun loadTournaments(forceRefresh: Boolean = false) {
+        if (forceRefresh || tournaments.value.isEmpty()) {
+            viewModelScope.launch {
+                repository.seedDefaultTournamentsIfEmpty()
+            }
+        }
+    }
+
     fun clearSnackbarMessage() {
         _snackbarMessage.value = null
     }
@@ -273,7 +281,6 @@ class EsportsViewModel(
             }
         }
     }
-
 
     suspend fun createTournamentAsync(
         title: String,
@@ -561,5 +568,3 @@ class EsportsViewModel(
         }
     }
 }
-
-
