@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.GameCategory
@@ -141,19 +142,12 @@ fun HomeScreen(
             .testTag("home_screen"),
         contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
     ) {
-        item {
-            HomeHeader(
-                walletBalance = walletBalance,
-                onWalletClick = onNavigateToWallet
-            )
-        }
-
+        item { HomeHeader(walletBalance = walletBalance, onWalletClick = onNavigateToWallet) }
         item {
             HeroPromoBanner(onExploreClick = {
                 viewModel.setCategory(GameCategory.FREE_FIRE)
             })
         }
-
         item {
             GameCategoryRow(
                 selectedCategory = selectedCategory,
@@ -264,23 +258,18 @@ fun HomeScreen(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp
                     )
-
                     Spacer(modifier = Modifier.height(10.dp))
-
                     Text(
                         text = "${item.gameCategory.displayName} • ${item.map} • ${item.matchType.ifBlank { item.format.label }}",
                         color = TextSecondary,
                         fontSize = 13.sp
                     )
-
                     Text(
                         text = "Time: ${item.scheduleDate} at ${item.scheduleTime}",
                         color = TextSecondary,
                         fontSize = 13.sp
                     )
-
                     Spacer(modifier = Modifier.height(12.dp))
-
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = CardNavyElevated,
@@ -299,9 +288,7 @@ fun HomeScreen(
                                     fontSize = 14.sp
                                 )
                             }
-
                             Spacer(modifier = Modifier.height(4.dp))
-
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -316,7 +303,6 @@ fun HomeScreen(
                             }
                         }
                     }
-
                     if (walletBalance < item.entryFee) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Surface(
@@ -351,18 +337,14 @@ fun HomeScreen(
                             }
                         }
                     }
-
                     Spacer(modifier = Modifier.height(12.dp))
-
                     Text(
                         text = "In-Game ID / UID",
                         color = TextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
-
                     Spacer(modifier = Modifier.height(6.dp))
-
                     OutlinedTextField(
                         value = inGameUidInput,
                         onValueChange = {
@@ -384,7 +366,6 @@ fun HomeScreen(
                             focusedLabelColor = NeonCyan
                         )
                     )
-
                     if (!joinDialogError.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Surface(
@@ -508,10 +489,7 @@ fun HomeScreen(
                 Text(item.title, color = TextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                ) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = "${item.gameCategory.displayName} • ${item.map} • ${item.matchType.ifBlank { item.format.label }}",
                         color = NeonCyan,
@@ -582,27 +560,22 @@ private fun ComingSoonTournamentCard(
                             .size(32.dp)
                     )
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 Text(
                     text = "New Tournaments Are Coming Soon!",
                     color = NeonCyan,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Black,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    textAlign = TextAlign.Center
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(
                     text = "Admin is setting up exciting new matches. Stay tuned!",
                     color = TextSecondary,
                     fontSize = 14.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
-
                 if (showRetry) {
                     Spacer(modifier = Modifier.height(18.dp))
                     Button(
@@ -655,9 +628,7 @@ fun HomeHeader(
                     modifier = Modifier.size(24.dp)
                 )
             }
-
             Spacer(modifier = Modifier.width(10.dp))
-
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -673,7 +644,6 @@ fun HomeHeader(
                         fontWeight = FontWeight.Black
                     )
                 }
-
                 Text(
                     text = "Esports Tournaments",
                     color = TextMuted,
@@ -701,9 +671,7 @@ fun HomeHeader(
                     tint = GoldAccent,
                     modifier = Modifier.size(16.dp)
                 )
-
                 Spacer(modifier = Modifier.width(6.dp))
-
                 Text(
                     text = "₹$walletBalance",
                     color = TextPrimary,
@@ -755,9 +723,7 @@ fun HeroPromoBanner(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(
                     text = "Live Esports Scrims\nReal DB Entry & Winning Prizes",
                     color = TextPrimary,
@@ -765,18 +731,14 @@ fun HeroPromoBanner(
                     fontWeight = FontWeight.Black,
                     lineHeight = 22.sp
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(
                     text = "Tournaments are synced live with Firebase Firestore. Entry fees auto-deduct from your cloud wallet.",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     lineHeight = 16.sp
                 )
-
                 Spacer(modifier = Modifier.height(12.dp))
-
                 Button(
                     onClick = onExploreClick,
                     shape = RoundedCornerShape(8.dp),
@@ -845,3 +807,4 @@ fun GameCategoryRow(
         }
     }
 }
+
