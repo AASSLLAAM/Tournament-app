@@ -53,6 +53,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MatchDetailsScreen
 import com.example.ui.screens.MyMatchesScreen
 import com.example.ui.screens.ProfileScreen
+import com.example.ui.screens.SignUpScreen
 import com.example.ui.screens.WalletScreen
 import com.example.ui.theme.CardNavy
 import com.example.ui.theme.DarkNavy
@@ -247,6 +248,7 @@ fun AppRootContent(
     onFatalError: (String) -> Unit = {}
 ) {
     var isGuestMode by remember { mutableStateOf(false) }
+    var showSignUpScreen by remember { mutableStateOf(false) }
     var currentUser by remember {
         mutableStateOf<FirebaseUser?>(
             try {
@@ -259,6 +261,26 @@ fun AppRootContent(
     }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    if (showSignUpScreen) {
+        SignUpScreen(
+            onSignUpSuccess = {
+                showSignUpScreen = false
+                try {
+                    currentUser = Firebase.auth.currentUser
+                } catch (_: Throwable) {
+                    isGuestMode = true
+                }
+            },
+            onBackToLogin = {
+                showSignUpScreen = false
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+        )
+        return
+    }
 
     DisposableEffect(Unit) {
         val authInstance = try {
@@ -300,6 +322,9 @@ fun AppRootContent(
                 } catch (_: Throwable) {
                     isGuestMode = true
                 }
+            },
+            onNavigateToSignUp = {
+                showSignUpScreen = true
             },
             modifier = Modifier
                 .fillMaxSize()
