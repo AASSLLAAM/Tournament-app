@@ -543,6 +543,7 @@ fun AdminScreen(
                                                 matchType = inlineMatchType
                                             )
                                             if (result.isSuccess) {
+                                                inlineTitle = ""
                                                 Toast.makeText(context, "Tournament published successfully!", Toast.LENGTH_SHORT).show()
                                                 onBack()
                                             } else {

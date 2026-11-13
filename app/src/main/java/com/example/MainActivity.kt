@@ -193,7 +193,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             val checkout = Checkout()
             val apiKey = try {
                 val key = BuildConfig.RAZORPAY_KEY_ID
-                if (key.isNullOrBlank()) "rzp_test_1DP5mmOlF5G5ag" else key
+                if (key.isNullOrBlank() || key == "YOUR_RAZORPAY_KEY_ID") "rzp_test_1DP5mmOlF5G5ag" else key
             } catch (_: Throwable) {
                 "rzp_test_1DP5mmOlF5G5ag"
             }
@@ -416,6 +416,7 @@ fun MainAppContainer(
     var isAdminRoleLoading by remember { mutableStateOf(true) }
     var isAdminVisible by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val currentUserId = try {
         Firebase.auth.currentUser?.uid
     } catch (_: Throwable) {
@@ -432,7 +433,7 @@ fun MainAppContainer(
         }
 
         try {
-            val firestore = FirebaseFirestore.getInstance()
+            val firestore = EsportsRepository.createFirestoreInstance(context)
             val doc = firestore
                 .collection("users")
                 .document(uid)

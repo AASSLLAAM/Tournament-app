@@ -29,8 +29,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
@@ -39,12 +40,16 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,6 +85,7 @@ import com.example.ui.theme.TextSecondary
 import com.example.viewmodel.EsportsViewModel
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: EsportsViewModel,
@@ -93,13 +99,15 @@ fun HomeScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val userProfile by viewModel.userProfile.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val isLoadingTournaments by viewModel.isLoadingTournaments.collectAsState()
+    val syncError by viewModel.tournamentSyncError.collectAsState()
 
     var tournamentToJoin by remember { mutableStateOf<Tournament?>(null) }
     var tournamentDetail by remember { mutableStateOf<Tournament?>(null) }
     var isJoinLoading by remember { mutableStateOf(false) }
     var joinDialogError by remember { mutableStateOf<String?>(null) }
     var inGameUidInput by remember { mutableStateOf("") }
-    var hasRetry by remember { mutableStateOf(false) }
 
     BackHandler(enabled = tournamentToJoin != null || tournamentDetail != null) {
         if (tournamentToJoin != null) {
@@ -134,96 +142,135 @@ fun HomeScreen(
         }
     }
 
-    val shouldShowComingSoon = filteredTournaments.isEmpty()
+    val shouldShowComingSoon = !isLoadingTournaments && filteredTournaments.isEmpty()
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("home_screen"),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { viewModel.refreshTournaments() },
+        modifier = modifier.fillMaxSize()
     ) {
-        item { HomeHeader(walletBalance = walletBalance, onWalletClick = onNavigateToWallet) }
-        item {
-            HeroPromoBanner(onExploreClick = {
-                viewModel.setCategory(GameCategory.FREE_FIRE)
-            })
-        }
-        item {
-            GameCategoryRow(
-                selectedCategory = selectedCategory,
-                onSelectCategory = { viewModel.setCategory(it) }
-            )
-        }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("home_screen"),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
+        ) {
+            item { HomeHeader(walletBalance = walletBalance, onWalletClick = onNavigateToWallet) }
+            item {
+                HeroPromoBanner(onExploreClick = {
+                    viewModel.setCategory(GameCategory.FREE_FIRE)
+                })
+            }
+            item {
+                GameCategoryRow(
+                    selectedCategory = selectedCategory,
+                    onSelectCategory = { viewModel.setCategory(it) }
+                )
+            }
 
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            item {
                 Row(
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Whatshot,
-                        contentDescription = null,
-                        tint = CrimsonRed,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Live Tournaments (Firestore)",
-                        color = TextPrimary,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                    Row(
+                        modifier = Modifier.weight(1f, fill = false),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Whatshot,
+                            contentDescription = null,
+                            tint = CrimsonRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Live Tournaments (Firestore)",
+                            color = TextPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = CardNavyElevated,
-                    border = BorderStroke(1.dp, BorderMuted)
-                ) {
-                    Text(
-                        text = "${filteredTournaments.size} Available",
-                        color = NeonCyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        IconButton(
+                            onClick = { viewModel.refreshTournaments() },
+                            enabled = !isRefreshing,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .testTag("refresh_tournaments_btn")
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = NeonCyan,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Tournaments",
+                                    tint = NeonCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = CardNavyElevated,
+                            border = BorderStroke(1.dp, BorderMuted)
+                        ) {
+                            Text(
+                                text = "${filteredTournaments.size} Available",
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
-        }
 
-        if (shouldShowComingSoon) {
-            item {
-                ComingSoonTournamentCard(
-                    onRetry = {
-                        hasRetry = true
-                        viewModel.loadTournaments(forceRefresh = true)
-                    },
-                    showRetry = hasRetry
-                )
-            }
-        } else {
-            items(filteredTournaments, key = { it.id }) { tournament ->
-                TournamentCard(
-                    tournament = tournament,
-                    onJoinClick = {
-                        isJoinLoading = false
-                        joinDialogError = null
-                        inGameUidInput = userProfile.ingameId.ifBlank { "" }
-                        tournamentToJoin = tournament
-                    },
-                    onDetailsClick = { onNavigateToMatchDetails(tournament) },
-                    onViewResultsClick = { onNavigateToMatchDetails(tournament) },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
+            if (isLoadingTournaments && tournaments.isEmpty()) {
+                item {
+                    SyncingTournamentsCard()
+                }
+            } else if (shouldShowComingSoon) {
+                item {
+                    ComingSoonTournamentCard(
+                        onRetry = { viewModel.refreshTournaments() },
+                        isRefreshing = isRefreshing,
+                        errorMessage = syncError,
+                        hasOtherCategoryTournaments = selectedCategory != GameCategory.ALL && tournaments.isNotEmpty(),
+                        selectedCategoryName = selectedCategory.displayName,
+                        onShowAllGames = { viewModel.setCategory(GameCategory.ALL) }
+                    )
+                }
+            } else {
+                items(filteredTournaments, key = { it.id }) { tournament ->
+                    TournamentCard(
+                        tournament = tournament,
+                        onJoinClick = {
+                            isJoinLoading = false
+                            joinDialogError = null
+                            inGameUidInput = userProfile.ingameId.ifBlank { "" }
+                            tournamentToJoin = tournament
+                        },
+                        onDetailsClick = { onNavigateToMatchDetails(tournament) },
+                        onViewResultsClick = { onNavigateToMatchDetails(tournament) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
             }
         }
     }
@@ -516,9 +563,53 @@ fun HomeScreen(
 }
 
 @Composable
+private fun SyncingTournamentsCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = CardNavy),
+        border = BorderStroke(1.dp, BorderCyan)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(
+                color = NeonCyan,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "Syncing Live Tournaments...",
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Fetching latest matches from Firestore in real time",
+                color = TextSecondary,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
 private fun ComingSoonTournamentCard(
     onRetry: () -> Unit,
-    showRetry: Boolean = false
+    isRefreshing: Boolean = false,
+    errorMessage: String? = null,
+    hasOtherCategoryTournaments: Boolean = false,
+    selectedCategoryName: String = "",
+    onShowAllGames: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -562,7 +653,11 @@ private fun ComingSoonTournamentCard(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "New Tournaments Are Coming Soon!",
+                    text = if (hasOtherCategoryTournaments) {
+                        "No $selectedCategoryName Tournaments Yet"
+                    } else {
+                        "New Tournaments Are Coming Soon!"
+                    },
                     color = NeonCyan,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Black,
@@ -570,26 +665,67 @@ private fun ComingSoonTournamentCard(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Admin is setting up exciting new matches. Stay tuned!",
-                    color = TextSecondary,
+                    text = when {
+                        !errorMessage.isNullOrBlank() -> errorMessage
+                        hasOtherCategoryTournaments -> "Tournaments are available under other games. Tap Show All Games or pull down to refresh."
+                        else -> "Admin is setting up exciting new matches. Pull down or tap Refresh to check for new tournaments."
+                    },
+                    color = if (!errorMessage.isNullOrBlank()) CrimsonRed else TextSecondary,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
-                if (showRetry) {
-                    Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(18.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasOtherCategoryTournaments) {
+                        OutlinedButton(
+                            onClick = onShowAllGames,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, NeonCyan),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+                        ) {
+                            Text(
+                                text = "Show All Games",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     Button(
                         onClick = onRetry,
+                        enabled = !isRefreshing,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = NeonCyan,
                             contentColor = Color.Black
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("coming_soon_refresh_btn")
                     ) {
-                        Text(
-                            text = "Retry",
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.Black,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Refreshing...",
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Refresh",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

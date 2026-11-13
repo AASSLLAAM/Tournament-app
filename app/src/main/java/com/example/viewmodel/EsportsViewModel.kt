@@ -13,6 +13,7 @@ import com.example.model.UserProfile
 import com.example.model.UserRegistration
 import com.example.model.WalletTransaction
 import com.example.model.WithdrawalSuccessInfo
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,9 +21,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class EsportsViewModel(
     private val repository: EsportsRepository
 ) : ViewModel() {
@@ -32,6 +37,18 @@ class EsportsViewModel(
 
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _isLoadingTournaments = MutableStateFlow(true)
+    val isLoadingTournaments: StateFlow<Boolean> = _isLoadingTournaments.asStateFlow()
+
+    private val _tournamentSyncError = MutableStateFlow<String?>(null)
+    val tournamentSyncError: StateFlow<String?> = _tournamentSyncError.asStateFlow()
+
+    private val _listenerRestartTrigger = MutableStateFlow(0)
+    private val _manualServerTournaments = MutableStateFlow<List<Tournament>?>(null)
 
     private val _isJoining = MutableStateFlow(false)
     val isJoining: StateFlow<Boolean> = _isJoining.asStateFlow()
@@ -54,13 +71,29 @@ class EsportsViewModel(
     private val _withdrawalSuccessInfo = MutableStateFlow<WithdrawalSuccessInfo?>(null)
     val withdrawalSuccessInfo: StateFlow<WithdrawalSuccessInfo?> = _withdrawalSuccessInfo.asStateFlow()
 
-    // 1. Observe Tournaments from Firestore merged with User Registrations
+    private val realtimeTournamentsFlow: Flow<List<Tournament>> = _listenerRestartTrigger.flatMapLatest {
+        repository.observeTournaments()
+            .onEach { list ->
+                _manualServerTournaments.value = null
+                _isLoadingTournaments.value = false
+                _tournamentSyncError.value = null
+            }
+            .catch { error ->
+                _isLoadingTournaments.value = false
+                _tournamentSyncError.value = error.message ?: "Unable to sync tournaments."
+                emit(_manualServerTournaments.value ?: emptyList())
+            }
+    }
+
+    // 1. Observe Tournaments from Firestore in real time merged with User Registrations
     val tournaments: StateFlow<List<Tournament>> = combine(
-        repository.observeTournaments(),
-        repository.observeUserRegistrations()
-    ) { allTournaments, userRegistrations ->
+        realtimeTournamentsFlow,
+        _manualServerTournaments,
+        repository.observeUserRegistrations().onStart { emit(emptyList()) }
+    ) { realtimeTournaments, manualOverride, userRegistrations ->
+        val baseTournaments = manualOverride ?: realtimeTournaments
         val regMap = userRegistrations.associateBy { it.tournamentId }
-        allTournaments.map { tour ->
+        baseTournaments.map { tour ->
             val reg = regMap[tour.id]
             if (reg != null) {
                 val activeRoomId = if (!tour.roomId.isNullOrBlank()) tour.roomId else reg.roomId
@@ -80,11 +113,13 @@ class EsportsViewModel(
                 tour.copy(isJoined = false)
             }
         }
-    }.catch {
+    }.catch { error ->
+        _isLoadingTournaments.value = false
+        _tournamentSyncError.value = error.message ?: "Unable to sync tournaments."
         emit(emptyList())
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000L),
+        started = SharingStarted.Eagerly,
         initialValue = emptyList()
     )
 
@@ -95,7 +130,7 @@ class EsportsViewModel(
             remote ?: default
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
+            started = SharingStarted.Eagerly,
             initialValue = UserProfile()
         )
 
@@ -104,7 +139,7 @@ class EsportsViewModel(
         profileArray[0].walletBalance
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000L),
+        started = SharingStarted.Eagerly,
         initialValue = 500
     )
 
@@ -113,7 +148,7 @@ class EsportsViewModel(
         .catch { emit(emptyList()) }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
 
@@ -123,10 +158,41 @@ class EsportsViewModel(
         }
     }
 
+    fun refreshTournaments() {
+        if (_isRefreshing.value) return
+        _isRefreshing.value = true
+        _tournamentSyncError.value = null
+        viewModelScope.launch {
+            try {
+                val result = repository.fetchTournamentsFromServer()
+                if (result.isSuccess) {
+                    val serverList = result.getOrDefault(emptyList())
+                    _manualServerTournaments.value = serverList
+                    _isLoadingTournaments.value = false
+                    _listenerRestartTrigger.value += 1
+                } else {
+                    val err = result.exceptionOrNull()?.message ?: "Failed to refresh tournaments."
+                    _tournamentSyncError.value = err
+                    _snackbarMessage.value = err
+                }
+            } catch (e: Throwable) {
+                val err = e.message ?: "Failed to refresh tournaments."
+                _tournamentSyncError.value = err
+                _snackbarMessage.value = err
+            } finally {
+                _isRefreshing.value = false
+                _isLoadingTournaments.value = false
+            }
+        }
+    }
+
     fun loadTournaments(forceRefresh: Boolean = false) {
-        if (forceRefresh || tournaments.value.isEmpty()) {
+        if (forceRefresh) {
+            refreshTournaments()
+        } else if (tournaments.value.isEmpty()) {
             viewModelScope.launch {
                 repository.seedDefaultTournamentsIfEmpty()
+                refreshTournaments()
             }
         }
     }

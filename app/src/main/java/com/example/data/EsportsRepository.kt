@@ -15,16 +15,22 @@ import com.example.util.handleFirestoreError
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
@@ -164,35 +170,169 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    // 1. Observe all tournaments from Firestore
-    fun observeTournaments(): Flow<List<Tournament>> = flow {
-        val path = "tournaments"
-        try {
-            emitAll(
-                db.collection(path)
-                    .snapshots()
-                    .map { snapshot ->
-                        val list = snapshot.documents.mapNotNull { doc ->
-                            try {
-                                doc.toObject(Tournament::class.java)?.copy(id = doc.id)
-                            } catch (_: Throwable) {
-                                null
-                            }
-                        }
-                        if (list.isEmpty()) DEFAULT_TOURNAMENTS else list
-                    }
-                    .catch { error ->
-                        Log.w(TAG, "observeTournaments stream warning: ${error.message}")
-                        emit(DEFAULT_TOURNAMENTS)
-                    }
-            )
-        } catch (e: Throwable) {
-            Log.w(TAG, "observeTournaments catch: ${e.message}")
-            emit(DEFAULT_TOURNAMENTS)
+    private fun normalizeGameCategoryName(raw: String): String {
+        val trimmed = raw.trim()
+        val lower = trimmed.lowercase()
+        return when {
+            lower == "free_fire" || lower.contains("free fire") || lower == "ff" -> "FREE_FIRE"
+            lower == "bgmi" || lower.contains("pubg") || lower.contains("battleground") -> "BGMI"
+            lower == "valorant" || lower == "val" -> "VALORANT"
+            lower == "cod_mobile" || lower.contains("cod") || lower.contains("call of duty") -> "COD_MOBILE"
+            trimmed.isBlank() -> "FREE_FIRE"
+            else -> trimmed.uppercase().replace(" ", "_")
         }
     }
 
-    // 2. Observe user's joined tournament registrations
+    private fun normalizeFormatName(raw: String): String {
+        val lower = raw.trim().lowercase()
+        return when {
+            lower.contains("solo") -> "SOLO"
+            lower.contains("duo") -> "DUO"
+            else -> "SQUAD"
+        }
+    }
+
+    private fun DocumentSnapshot.readInt(field: String, default: Int): Int {
+        val value = get(field) ?: return default
+        return when (value) {
+            is Number -> value.toInt()
+            is String -> value.toIntOrNull() ?: default
+            else -> default
+        }
+    }
+
+    private fun documentToTournament(doc: DocumentSnapshot): Tournament? {
+        if (!doc.exists()) return null
+        return try {
+            val rawCategory = (doc.getString("gameCategoryName")
+                ?: doc.getString("gameCategory")
+                ?: doc.getString("game")
+                ?: doc.getString("category")
+                ?: "FREE_FIRE").trim()
+            val normalizedCategory = normalizeGameCategoryName(rawCategory)
+
+            val rawMatchType = (doc.getString("matchType")
+                ?: doc.getString("format")
+                ?: doc.getString("formatName")
+                ?: "Squad").trim()
+            val rawFormat = (doc.getString("formatName")
+                ?: doc.getString("format")
+                ?: rawMatchType).trim()
+            val normalizedFormat = normalizeFormatName(rawFormat)
+
+            val banner = doc.getString("bannerType")?.takeIf { it.isNotBlank() }
+                ?: if (normalizedCategory == "BGMI") "bgmi" else "ff"
+
+            val status = doc.getString("statusText")?.takeIf { it.isNotBlank() }
+                ?: doc.getString("status")?.takeIf { it.isNotBlank() }
+                ?: "Open"
+
+            Tournament(
+                id = doc.id,
+                title = doc.getString("title") ?: "WorldWar Tournament",
+                gameCategoryName = normalizedCategory,
+                map = doc.getString("map") ?: if (normalizedCategory == "BGMI") "Erangel" else "Bermuda",
+                matchType = rawMatchType.ifBlank { "Squad" },
+                formatName = normalizedFormat,
+                scheduleTime = doc.getString("scheduleTime") ?: "07:00 PM",
+                scheduleDate = doc.getString("scheduleDate") ?: "Today",
+                entryFee = doc.readInt("entryFee", 50),
+                prizePool = doc.readInt("prizePool", 2500),
+                perKill = doc.readInt("perKill", 10),
+                totalSlots = doc.readInt("totalSlots", 48).coerceAtLeast(1),
+                filledSlots = doc.readInt("filledSlots", 0).coerceAtLeast(0),
+                bannerType = banner,
+                serverType = doc.getString("serverType") ?: "Asia / TPP",
+                organizer = doc.getString("organizer") ?: "WorldWar Official",
+                statusText = status,
+                winnerName = doc.getString("winnerName"),
+                roomId = doc.getString("roomId"),
+                roomPassword = doc.getString("roomPassword")
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to parse tournament doc ${doc.id}: ${e.message}")
+            try {
+                doc.toObject(Tournament::class.java)?.copy(id = doc.id)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
+    // 1. Observe ALL tournaments in real time using addSnapshotListener (no whereEqualTo exclusions)
+    fun observeTournaments(): Flow<List<Tournament>> = callbackFlow {
+        val path = "tournaments"
+        val collectionRef = db.collection(path)
+
+        val registration = collectionRef.addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+            if (error != null) {
+                Log.w(TAG, "observeTournaments addSnapshotListener error: ${error.message}")
+                handleFirestoreError(error, OperationType.LIST, path)
+                // Do not wipe UI on transient listener error; try a direct server read
+                collectionRef.get(Source.SERVER)
+                    .addOnSuccessListener { serverSnap ->
+                        val serverList = serverSnap.documents.mapNotNull { documentToTournament(it) }
+                        trySend(serverList)
+                    }
+                    .addOnFailureListener {
+                        trySend(DEFAULT_TOURNAMENTS)
+                    }
+                return@addSnapshotListener
+            }
+
+            if (snapshot == null) return@addSnapshotListener
+
+            val parsedList = snapshot.documents.mapNotNull { doc ->
+                documentToTournament(doc)
+            }
+
+            // If local cache is empty on initial startup, wait for server response before emitting empty
+            if (parsedList.isEmpty() && snapshot.metadata.isFromCache) {
+                Log.d(TAG, "Initial cache snapshot empty; waiting/fetching from server...")
+                collectionRef.get(Source.SERVER)
+                    .addOnSuccessListener { serverSnap ->
+                        val serverList = serverSnap.documents.mapNotNull { documentToTournament(it) }
+                        if (serverList.isNotEmpty() || !snapshot.metadata.hasPendingWrites()) {
+                            trySend(serverList)
+                        }
+                    }
+                return@addSnapshotListener
+            }
+
+            trySend(parsedList)
+        }
+
+        awaitClose {
+            try {
+                registration.remove()
+            } catch (_: Throwable) {}
+        }
+    }
+
+    // Force-fetch latest tournaments directly from Firestore server (pull-to-refresh / manual refresh)
+    suspend fun fetchTournamentsFromServer(): Result<List<Tournament>> {
+        val path = "tournaments"
+        return try {
+            val snapshot = try {
+                withTimeout(8000L) {
+                    db.collection(path).get(Source.SERVER).await()
+                }
+            } catch (_: Throwable) {
+                withTimeout(8000L) {
+                    db.collection(path).get(Source.DEFAULT).await()
+                }
+            }
+            val list = snapshot.documents.mapNotNull { doc ->
+                documentToTournament(doc)
+            }
+            Result.success(list)
+        } catch (e: Throwable) {
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
+
+    // 2. Observe user's joined tournament registrations (resilient so it never blocks combine)
     fun observeUserRegistrations(): Flow<List<UserRegistration>> = flow {
         if (isGuest()) {
             emitAll(guestRegistrationsFlow)
@@ -200,28 +340,34 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         }
         val uid = requireUserId()
         val path = "users/$uid/registrations"
-        try {
-            emitAll(
-                db.collection("users").document(uid).collection("registrations")
-                    .snapshots()
-                    .map { snapshot ->
-                        snapshot.documents.mapNotNull { doc ->
+        emitAll(
+            callbackFlow<List<UserRegistration>> {
+                val registration = db.collection("users").document(uid).collection("registrations")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            handleFirestoreError(error, OperationType.LIST, path)
+                            trySend(emptyList())
+                            return@addSnapshotListener
+                        }
+                        val list = snapshot?.documents?.mapNotNull { doc ->
                             try {
                                 doc.toObject(UserRegistration::class.java)?.copy(registrationId = doc.id)
                             } catch (_: Throwable) {
                                 null
                             }
-                        }
+                        } ?: emptyList()
+                        trySend(list)
                     }
-                    .catch { error ->
-                        handleFirestoreError(error, OperationType.LIST, path)
-                        emit(emptyList())
-                    }
-            )
-        } catch (e: Throwable) {
-            handleFirestoreError(e, OperationType.LIST, path)
-            emit(emptyList())
-        }
+                awaitClose {
+                    try {
+                        registration.remove()
+                    } catch (_: Throwable) {}
+                }
+            }.onStart { emit(emptyList()) }
+        )
+    }.catch { error ->
+        Log.w(TAG, "observeUserRegistrations warning: ${error.message}")
+        emit(emptyList())
     }
 
     // 3. Observe user profile (including wallet balance and admin role)
@@ -692,18 +838,22 @@ class EsportsRepository(private val db: FirebaseFirestore) {
         }
 
         return try {
-            val tourId = "tour_${System.currentTimeMillis() % 100000}"
-            val banner = if (gameCategory.contains("BGMI", ignoreCase = true)) "bgmi" else "ff"
+            val tourId = "tour_${System.currentTimeMillis()}_${(100..999).random()}"
+            val normalizedCategory = normalizeGameCategoryName(gameCategory)
+            val normalizedFormat = normalizeFormatName(format)
+            val cleanMatchType = matchType.trim().ifBlank { format.trim().ifBlank { "Squad" } }
+            val banner = if (normalizedCategory == "BGMI") "bgmi" else "ff"
 
             val tourMap = mapOf(
                 "id" to tourId,
-                "title" to title,
-                "gameCategoryName" to gameCategory,
-                "map" to map,
-                "matchType" to matchType,
-                "formatName" to format,
-                "scheduleTime" to scheduleTime,
-                "scheduleDate" to scheduleDate,
+                "title" to title.trim(),
+                "gameCategoryName" to normalizedCategory,
+                "game" to normalizedCategory,
+                "map" to map.trim(),
+                "matchType" to cleanMatchType,
+                "formatName" to normalizedFormat,
+                "scheduleTime" to scheduleTime.trim(),
+                "scheduleDate" to scheduleDate.trim(),
                 "entryFee" to entryFee,
                 "prizePool" to prizePool,
                 "perKill" to perKill,
@@ -712,7 +862,9 @@ class EsportsRepository(private val db: FirebaseFirestore) {
                 "bannerType" to banner,
                 "serverType" to "Asia / TPP",
                 "organizer" to "WorldWar Admin",
-                "statusText" to "Open"
+                "statusText" to "Open",
+                "status" to "active",
+                "createdAt" to FieldValue.serverTimestamp()
             )
 
             withTimeout(8000L) {
