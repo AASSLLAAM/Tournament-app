@@ -30,7 +30,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Trophy
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
@@ -552,7 +552,7 @@ private fun ComingSoonTournamentCard(
                     border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.8f))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Trophy,
+                        imageVector = Icons.Default.EmojiEvents,
                         contentDescription = "Trophy",
                         tint = NeonCyan,
                         modifier = Modifier
