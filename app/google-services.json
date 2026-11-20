@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "488780555536",
+    "project_id": "woeldwar-esports",
+    "storage_bucket": "woeldwar-esports.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:488780555536:android:c0f690dbc7c928e2c87195",
+        "android_client_info": {
+          "package_name": "com.aistudio.worldwar.kxmg"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_nsguerVimRLYbRyxm9ruMopYL_8-oXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
